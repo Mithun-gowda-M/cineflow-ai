@@ -154,3 +154,4 @@ CINEFLOW completely eliminates shell-injection vulnerabilities:
 - **Strict Path Validation:** Filenames uploaded by users are slugified into UUID-based internal identifiers (`media_uuid.mp4`), preventing path traversal exploits (`../../`).
 - **MIME & Header Verification:** File extensions are cross-checked with binary magic bytes using `python-magic` / header probing.
 - **Quota Enforcers:** Local storage caps per project prevent disk exhaustion attacks.
+

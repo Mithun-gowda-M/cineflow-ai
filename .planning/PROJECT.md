@@ -92,3 +92,4 @@
 2. **No Shell Injections:** All media processing tools run through validated Python argument lists (`subprocess.run(["ffmpeg", "-i", ...])`), never raw unescaped shell strings.
 3. **Storage Quotas:** Automatic file expiry and size caps to safeguard local disk space.
 4. **Clean Git:** Strictly zero credentials, keys, or raw media in Git history.
+

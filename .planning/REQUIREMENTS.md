@@ -94,3 +94,4 @@
 | **V-05** | Real MP4 render & playback | FFmpeg execution producing valid MP4 playable in HTML5 video |
 | **V-06** | Dark cinematic UI responsiveness | Lighthouse audit & multi-viewport layout validation |
 | **V-07** | Zero external API runtime dependency | Full offline test pass with internet disconnected |
+

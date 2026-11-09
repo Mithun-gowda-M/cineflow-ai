@@ -105,3 +105,4 @@ This is the flagship core of CINEFLOW AI:
 - **Styling:** Tailwind CSS with customized cinematic theme tokens
 - **Icons:** `lucide-react` (Camera, Film, Sparkles, Sliders, Play, Volume2, Mic, Scissors, Layers, CheckCircle, Download, etc.)
 - **State Management:** Pure React state + custom Timeline context / store supporting undo/redo history stacks and real-time playback synchronization.
+

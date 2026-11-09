@@ -131,3 +131,4 @@ Open [http://localhost:3000](http://localhost:3000) to launch the CINEFLOW AI in
 Developed for **BMSIT** student innovators, media clubs, and competitive hackathon teams. For deployment guidelines, see `docs/deployment/DEPLOYMENT.md`.
 
 Distributed under the **MIT License**.
+

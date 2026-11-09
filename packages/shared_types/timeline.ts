@@ -87,3 +87,4 @@ export interface RenderJobStatus {
   output_file_size_bytes?: number;
   error_message?: string;
 }
+

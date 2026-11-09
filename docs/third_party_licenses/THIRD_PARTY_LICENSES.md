@@ -61,3 +61,4 @@ CINEFLOW AI maintains **complete architectural originality**:
 1. All AI director algorithms, storyboard generation schemas, multi-track timeline representations, and rendering orchestration are original CINEFLOW implementations.
 2. Third-party tools serve purely as low-level engine primitives (e.g., FFmpeg executes the filtergraph; Librosa calculates tempo; PySceneDetect spots cut frames).
 3. No proprietary, restrictive, or viral-copyleft code is copied or embedded. All CINEFLOW AI code is released under the **MIT License**.
+

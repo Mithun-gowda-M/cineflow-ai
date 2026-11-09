@@ -1,0 +1,61 @@
+# Dependencies
+node_modules/
+.pnpm-store/
+.venv/
+venv/
+env/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Build Outputs
+.next/
+out/
+build/
+dist/
+*.egg-info/
+
+# Environment and Secrets
+.env
+.env.local
+.env.*.local
+*.key
+*.pem
+*.cert
+
+# Media Processing, Temp and Renders
+temp/
+renders/
+uploads/
+cache/
+proxies/
+*.mp4
+*.mov
+*.avi
+*.mkv
+*.wav
+*.mp3
+*.flac
+*.aac
+!assets/sample_media/**
+
+# Large AI Model Weights
+models/*.bin
+models/*.onnx
+models/*.pt
+models/*.safetensors
+models/*.gguf
+
+# Logs and Testing
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pytest_cache/
+coverage/
+
+# OS Specific
+Thumbs.db
+Desktop.ini
+.DS_Store

@@ -1,0 +1,29 @@
+{
+  "projectName": "CINEFLOW AI",
+  "tagline": "Your AI. Your Story. Your Cinema.",
+  "version": "1.0.0",
+  "framework": "GSD",
+  "workflow": {
+    "commitStyle": "conventional",
+    "gitBranch": "main",
+    "featureBranchPrefix": "feature/",
+    "requireTestsBeforeMilestone": true,
+    "preventDirectMainPush": false,
+    "interactivePrompts": true
+  },
+  "architecture": {
+    "frontend": "Next.js 15 (React 19, TypeScript, Tailwind CSS, Framer Motion)",
+    "backend": "Python 3.12 (FastAPI, Pydantic v2)",
+    "videoProcessing": "Native FFmpeg / FFprobe + PySceneDetect + OpenCV",
+    "audioProcessing": "Librosa + Whisper.cpp / faster-whisper",
+    "aiDirector": "Ollama local LLM (llama3.2) with rule-based heuristic fallback",
+    "database": "SQLite (dev/local), PostgreSQL (campus multi-user)",
+    "storage": "Local file system with configurable user quotas"
+  },
+  "constraints": {
+    "zeroCloudSubscriptions": true,
+    "maxOptionalBudgetINR": 5000,
+    "targetAudience": ["BMSIT students", "Hackathon competitors", "Independent creators"],
+    "supportedAspectRatios": ["16:9", "9:16", "1:1", "4:5", "21:9"]
+  }
+}

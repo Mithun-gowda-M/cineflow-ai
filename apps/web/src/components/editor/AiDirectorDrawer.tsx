@@ -3,8 +3,6 @@
 import React, { useState } from "react";
 import {
   Sparkles,
-  Mic,
-  MicOff,
   Send,
   Sliders,
   Scissors,
@@ -17,9 +15,11 @@ import {
   Music,
   Type,
   Plus,
+  MessageSquare,
 } from "lucide-react";
 import { GoldButton } from "@/components/ui/GoldButton";
 import { Badge } from "@/components/ui/Badge";
+import { VoiceCommandButton } from "@/components/editor/VoiceCommandButton";
 import {
   CinematicEffects,
   ColorGradePreset,
@@ -35,6 +35,8 @@ interface AiDirectorDrawerProps {
   onUpdateClip: (clipId: string, updates: Partial<TimelineClip>) => void;
   onDeleteClip: (clipId: string) => void;
   onApplyAiPlan: (instruction: string) => Promise<void> | void;
+  onApplyConversationalEdit?: (instruction: string) => Promise<void> | void;
+  editDiffChanges?: string[];
   isCollapsed: boolean;
   onToggleCollapse: () => void;
   globalColorGrade: ColorGradePreset;
@@ -48,6 +50,9 @@ interface AiDirectorDrawerProps {
   subtitles?: SubtitleCue[];
   onAddSubtitle?: (text: string, style: SubtitleCue["style"]) => void;
   onDeleteSubtitle?: (id: string) => void;
+  onAutoCaption?: () => Promise<void> | void;
+  canAutoCaption?: boolean;
+  isCaptioning?: boolean;
   storyboard?: BackendStoryboardBeat[];
   directorEngine?: "ollama" | "rule_fallback" | "demo" | null;
   directorWarnings?: string[];
@@ -59,6 +64,8 @@ export const AiDirectorDrawer: React.FC<AiDirectorDrawerProps> = ({
   onUpdateClip,
   onDeleteClip,
   onApplyAiPlan,
+  onApplyConversationalEdit,
+  editDiffChanges = [],
   isCollapsed,
   onToggleCollapse,
   globalColorGrade,
@@ -72,39 +79,36 @@ export const AiDirectorDrawer: React.FC<AiDirectorDrawerProps> = ({
   subtitles = [],
   onAddSubtitle,
   onDeleteSubtitle,
+  onAutoCaption,
+  canAutoCaption = false,
+  isCaptioning = false,
   storyboard = [],
   directorEngine = null,
   directorWarnings = [],
   directorError = "",
 }) => {
   const [prompt, setPrompt] = useState("");
-  const [isListening, setIsListening] = useState(false);
+  const [copilotMode, setCopilotMode] = useState<"edit" | "plan">("edit");
+  const [voiceError, setVoiceError] = useState("");
   const [isProcessing, setIsProcessing] = useState(false);
   const [subText, setSubText] = useState("");
   const [subStyle, setSubStyle] = useState<SubtitleCue["style"]>("cinematic_gold_bottom");
 
-  const handleSendPrompt = async (textToSend?: string) => {
+  const handleSendPrompt = async (textToSend?: string, overrideMode?: "edit" | "plan") => {
     const text = textToSend || prompt;
     if (!text.trim()) return;
+    const mode = overrideMode || copilotMode;
 
     setIsProcessing(true);
     try {
-      await onApplyAiPlan(text);
+      if (mode === "edit" && onApplyConversationalEdit) {
+        await onApplyConversationalEdit(text);
+      } else {
+        await onApplyAiPlan(text);
+      }
       setPrompt("");
     } finally {
       setIsProcessing(false);
-    }
-  };
-
-  const toggleVoiceListen = () => {
-    if (isListening) {
-      setIsListening(false);
-    } else {
-      setIsListening(true);
-      setTimeout(() => {
-        setPrompt("Create a two-minute cinematic Deepavali video with slow dramatic intro and fast transitions during fireworks");
-        setIsListening(false);
-      }, 2200);
     }
   };
 
@@ -141,13 +145,36 @@ export const AiDirectorDrawer: React.FC<AiDirectorDrawerProps> = ({
       {/* AI Conversational Input Box */}
       <div className="p-3 border-b border-cine-border space-y-3 bg-cine-black/40">
         <div className="flex items-center justify-between text-[11px] text-gray-400">
-          <span>Creative Instructions</span>
-          <span className="text-purple-400 font-mono">
+          <div className="flex items-center gap-1 bg-cine-black border border-cine-border rounded-md p-0.5">
+            <button
+              type="button"
+              onClick={() => setCopilotMode("edit")}
+              className={`px-2 py-0.5 rounded text-[10px] font-semibold flex items-center gap-1 transition-colors ${
+                copilotMode === "edit"
+                  ? "bg-cine-gold-500 text-cine-black"
+                  : "text-gray-400 hover:text-white"
+              }`}
+            >
+              <MessageSquare className="w-2.5 h-2.5" /> Chat Edit
+            </button>
+            <button
+              type="button"
+              onClick={() => setCopilotMode("plan")}
+              className={`px-2 py-0.5 rounded text-[10px] font-semibold transition-colors ${
+                copilotMode === "plan"
+                  ? "bg-cine-gold-500 text-cine-black"
+                  : "text-gray-400 hover:text-white"
+              }`}
+            >
+              New Cut
+            </button>
+          </div>
+          <span className="text-purple-400 font-mono text-[10px]">
             {directorEngine === "ollama"
               ? "Ollama LLM"
               : directorEngine === "rule_fallback"
-              ? "4-Act Rule Engine"
-              : "Ollama + Heuristic"}
+              ? "Deterministic"
+              : "Copilot Ready"}
           </span>
         </div>
 
@@ -156,29 +183,21 @@ export const AiDirectorDrawer: React.FC<AiDirectorDrawerProps> = ({
             rows={3}
             value={prompt}
             onChange={(e) => setPrompt(e.target.value)}
-            placeholder="e.g. Create a two-minute Deepavali film with slow dramatic intro and fast fireworks cuts..."
+            placeholder={
+              copilotMode === "edit"
+                ? "e.g. Trim clip 1 by 1s, make it faster, or change to bleach bypass..."
+                : "e.g. Create a 2-minute Deepavali film with slow dramatic intro..."
+            }
             className="w-full p-2.5 rounded-lg bg-cine-black border border-cine-border text-xs text-white placeholder-gray-500 focus:outline-none focus:border-cine-gold-500 resize-none font-sans"
           />
-          {isListening && (
-            <div className="absolute top-2 right-2 flex items-center gap-1 text-[10px] text-red-400 bg-red-500/10 px-2 py-0.5 rounded animate-pulse">
-              <span className="w-1.5 h-1.5 rounded-full bg-red-400" /> Listening...
-            </div>
-          )}
         </div>
 
         <div className="flex items-center justify-between gap-2">
-          <button
-            onClick={toggleVoiceListen}
-            className={`p-2 rounded-lg border text-xs flex items-center gap-1.5 transition-all ${
-              isListening
-                ? "bg-red-500/20 text-red-400 border-red-500 animate-pulse"
-                : "bg-cine-card text-gray-300 border-cine-border hover:text-cine-gold-400"
-            }`}
-            title="Speech Voice Command"
-          >
-            {isListening ? <MicOff className="w-3.5 h-3.5" /> : <Mic className="w-3.5 h-3.5" />}
-            <span className="text-[11px]">{isListening ? "Listening" : "Voice"}</span>
-          </button>
+          <VoiceCommandButton
+            onTranscript={(spoken) => setPrompt(spoken)}
+            onError={(err) => setVoiceError(err)}
+            disabled={isProcessing}
+          />
 
           <GoldButton
             size="sm"
@@ -192,14 +211,31 @@ export const AiDirectorDrawer: React.FC<AiDirectorDrawerProps> = ({
               )
             }
           >
-            {isProcessing ? "Directing..." : "Direct Cut"}
+            {isProcessing
+              ? copilotMode === "edit"
+                ? "Applying..."
+                : "Directing..."
+              : copilotMode === "edit"
+              ? "Apply Edit"
+              : "Direct Cut"}
           </GoldButton>
         </div>
 
-        {directorError && (
+        {(voiceError || directorError) && (
           <div className="p-2 rounded bg-red-500/10 border border-red-500/30 text-[11px] text-red-300 flex items-start gap-1.5">
             <AlertCircle className="w-3.5 h-3.5 shrink-0 mt-0.5" />
-            <span>{directorError}</span>
+            <span>{voiceError || directorError}</span>
+          </div>
+        )}
+
+        {editDiffChanges.length > 0 && (
+          <div className="p-2 rounded bg-cine-cyan-500/10 border border-cine-cyan-500/30 text-[10px] text-cine-cyan-300 space-y-0.5">
+            <span className="font-bold uppercase tracking-wider text-[9px] text-cine-cyan-400">
+              Timeline Diff Applied:
+            </span>
+            {editDiffChanges.map((chg, idx) => (
+              <p key={idx}>• {chg}</p>
+            ))}
           </div>
         )}
 
@@ -213,16 +249,25 @@ export const AiDirectorDrawer: React.FC<AiDirectorDrawerProps> = ({
 
         {/* Quick Recipe Chips */}
         <div className="space-y-1.5 pt-1">
-          <span className="text-[10px] text-gray-500 uppercase font-semibold">Quick Directing Recipes:</span>
+          <span className="text-[10px] text-gray-500 uppercase font-semibold">
+            {copilotMode === "edit" ? "Quick Voice / Chat Edits:" : "Quick Directing Recipes:"}
+          </span>
           <div className="flex flex-col gap-1.5">
-            {[
-              "Create a 2-minute Deepavali film with slow dramatic intro and fast fireworks",
-              "Fast 9:16 vertical Reel with energetic cuts",
-              "Professional travel film with emotional ending",
-            ].map((recipe, idx) => (
+            {(copilotMode === "edit"
+              ? [
+                  "Change to golden hour grading and add vignette",
+                  "Make the cut faster and snap cuts to music beats",
+                  "Switch to 9:16 vertical reel",
+                ]
+              : [
+                  "Create a 2-minute Deepavali film with slow dramatic intro and fast fireworks",
+                  "Fast 9:16 vertical Reel with energetic cuts",
+                  "Professional travel film with emotional ending",
+                ]
+            ).map((recipe, idx) => (
               <button
                 key={idx}
-                onClick={() => handleSendPrompt(recipe)}
+                onClick={() => handleSendPrompt(recipe, copilotMode)}
                 className="text-left p-1.5 rounded bg-cine-surface border border-cine-border hover:border-cine-gold-500/40 text-[11px] text-gray-300 hover:text-cine-gold-300 transition-colors"
               >
                 &ldquo;{recipe}&rdquo;
@@ -432,7 +477,20 @@ export const AiDirectorDrawer: React.FC<AiDirectorDrawerProps> = ({
               <span className="flex items-center gap-1.5">
                 <Type className="w-3.5 h-3.5 text-purple-400" /> Burned-In Titles (T1)
               </span>
-              <span className="text-[10px] text-gray-500 font-mono">{subtitles.length} cues</span>
+              <div className="flex items-center gap-2">
+                {onAutoCaption && (
+                  <button
+                    type="button"
+                    onClick={() => onAutoCaption()}
+                    disabled={!canAutoCaption || isCaptioning}
+                    className="px-1.5 py-0.5 rounded bg-purple-500/20 border border-purple-500/40 text-[10px] text-purple-300 hover:bg-purple-500/30 disabled:opacity-40"
+                    title="Auto-transcribe speech via local Whisper"
+                  >
+                    {isCaptioning ? "Whisper..." : "Auto-Caption"}
+                  </button>
+                )}
+                <span className="text-[10px] text-gray-500 font-mono">{subtitles.length} cues</span>
+              </div>
             </div>
 
             <div className="space-y-1.5">

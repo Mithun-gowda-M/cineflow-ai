@@ -179,12 +179,15 @@ class AudioTrackCue(BaseModel):
     duck_volume: float = Field(default=0.25, ge=0.0, le=1.0)
 
 
+SubtitleStyle = Literal["cinematic_gold_bottom", "bold_center_reel", "subtle_white"]
+
+
 class SubtitleCue(BaseModel):
     id: str
     start_seconds: float = Field(ge=0.0)
     end_seconds: float = Field(gt=0.0)
     text: str = Field(min_length=1, max_length=400)
-    style: Literal["cinematic_gold_bottom", "bold_center_reel", "subtle_white"] = "cinematic_gold_bottom"
+    style: SubtitleStyle = "cinematic_gold_bottom"
 
     @model_validator(mode="after")
     def validate_cue_times(self) -> "SubtitleCue":
@@ -248,6 +251,7 @@ class RenderRequest(BaseModel):
     timeline: TimelinePlan
     resolution: ResolutionPreset = "1080p"
     encoder_preference: Literal["auto", "cpu", "nvenc", "qsv", "amf"] = "auto"
+    partial_cache: bool = True
 
 
 class RenderJobStatus(BaseModel):
@@ -259,6 +263,9 @@ class RenderJobStatus(BaseModel):
     resolution: ResolutionPreset = "1080p"
     output_video_url: Optional[str] = None
     output_file_size_bytes: Optional[int] = None
+    segment_cache_hits: int = 0
+    segment_cache_misses: int = 0
+    partial_rerender_used: bool = False
     error_message: Optional[str] = None
     created_at: str
     updated_at: str
@@ -358,4 +365,96 @@ class BeatSyncResponse(BaseModel):
     tempo_bpm: float
     snapped_cuts: int
     beat_timestamps_used: list[float] = Field(default_factory=list)
+
+
+# ---- Phase 6: Voice, Speech-to-Text & Conversational Editing Schemas ----
+
+
+class TranscriptWord(BaseModel):
+    word: str
+    start_seconds: float = Field(ge=0.0)
+    end_seconds: float = Field(ge=0.0)
+    probability: float = Field(default=1.0, ge=0.0, le=1.0)
+
+
+class TranscriptSegment(BaseModel):
+    id: str
+    start_seconds: float = Field(ge=0.0)
+    end_seconds: float = Field(gt=0.0)
+    text: str
+    words: list[TranscriptWord] = Field(default_factory=list)
+
+
+class WhisperStatusResponse(BaseModel):
+    package_installed: bool
+    model_name: str
+    device: str
+    compute_type: str
+    model_cached: bool
+    ready: bool
+    ffmpeg_ready: bool
+    detail: str = ""
+
+
+class TranscriptionResponse(BaseModel):
+    text: str
+    language: str = "en"
+    duration_seconds: float = 0.0
+    engine: Literal["faster_whisper", "custom"] = "faster_whisper"
+    segments: list[TranscriptSegment] = Field(default_factory=list)
+    suggested_subtitles: list[SubtitleCue] = Field(default_factory=list)
+
+
+class TimelineDiffSummary(BaseModel):
+    added_clip_ids: list[str] = Field(default_factory=list)
+    removed_clip_ids: list[str] = Field(default_factory=list)
+    modified_clip_ids: list[str] = Field(default_factory=list)
+    shifted_clip_ids: list[str] = Field(default_factory=list)
+    unchanged_clip_ids: list[str] = Field(default_factory=list)
+    global_visual_changed: bool = False
+    subtitles_changed: bool = False
+    audio_changed: bool = False
+    affected_segment_indices: list[int] = Field(default_factory=list)
+    changes: list[str] = Field(default_factory=list)
+
+
+class ConversationalEditRequest(BaseModel):
+    project_id: str = Field(default="proj_studio_01", min_length=1, max_length=128)
+    instruction: str = Field(min_length=2, max_length=2000)
+    timeline: TimelinePlan
+    use_llm: bool = True
+    record_history: bool = True
+
+
+class ConversationalEditResponse(BaseModel):
+    engine_used: Literal["ollama", "rule_fallback"]
+    instruction: str
+    timeline: TimelinePlan
+    diff: TimelineDiffSummary
+    operations_applied: list[str] = Field(default_factory=list)
+    warnings: list[str] = Field(default_factory=list)
+    revision_index: int = 0
+    history_count: int = 0
+    can_undo: bool = False
+    can_redo: bool = False
+
+
+class TimelineRevisionRecord(BaseModel):
+    revision_id: str
+    project_id: str
+    revision_index: int
+    command_text: str
+    diff_summary: TimelineDiffSummary
+    timeline: TimelinePlan
+    created_at: str
+
+
+class ProjectHistoryResponse(BaseModel):
+    project_id: str
+    active_revision_index: int
+    total_revisions: int
+    can_undo: bool
+    can_redo: bool
+    timeline: Optional[TimelinePlan] = None
+    revisions: list[TimelineRevisionRecord] = Field(default_factory=list)
 

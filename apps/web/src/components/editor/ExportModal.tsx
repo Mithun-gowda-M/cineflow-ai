@@ -51,6 +51,7 @@ export const ExportModal: React.FC<ExportModalProps> = ({
   const [errorMessage, setErrorMessage] = useState<string>("");
   const [activeJobId, setActiveJobId] = useState<string | null>(null);
   const [outputFileSize, setOutputFileSize] = useState<number | null>(null);
+  const [cacheStats, setCacheStats] = useState<{ hits: number; misses: number; partial: boolean } | null>(null);
 
   const pollRef = useRef<NodeJS.Timeout | null>(null);
 
@@ -103,6 +104,13 @@ export const ExportModal: React.FC<ExportModalProps> = ({
           if (status.status === "completed") {
             if (pollRef.current) clearInterval(pollRef.current);
             setOutputFileSize(status.output_file_size_bytes || null);
+            if (typeof status.segment_cache_hits === "number") {
+              setCacheStats({
+                hits: status.segment_cache_hits,
+                misses: status.segment_cache_misses ?? 0,
+                partial: Boolean(status.partial_rerender_used),
+              });
+            }
             setIsExporting(false);
             setIsComplete(true);
           } else if (status.status === "failed" || status.status === "cancelled") {
@@ -144,6 +152,7 @@ export const ExportModal: React.FC<ExportModalProps> = ({
     setErrorMessage("");
     setActiveJobId(null);
     setOutputFileSize(null);
+    setCacheStats(null);
     onClose();
   };
 
@@ -317,6 +326,11 @@ export const ExportModal: React.FC<ExportModalProps> = ({
               Conformed to {resolution} ({aspectRatio})
               {outputFileSize ? ` • ${(outputFileSize / (1024 * 1024)).toFixed(2)} MB` : ""}.
             </p>
+            {cacheStats && cacheStats.partial && (
+              <p className="text-[11px] font-mono text-cine-cyan-400 mt-1">
+                Partial Re-Render Cache: {cacheStats.hits}/{cacheStats.hits + cacheStats.misses} untouched segments reused
+              </p>
+            )}
           </div>
 
           <div className="pt-4 flex flex-col sm:flex-row items-center justify-center gap-3">

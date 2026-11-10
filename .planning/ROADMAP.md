@@ -1,8 +1,8 @@
 # ROADMAP: CINEFLOW AI
 
 > **Strategy:** Phased Delivery from Verified Foundation to Institutional Deployment  
-> **Current Phase:** Phase 5 (Advanced Cinematic Engine & Audio Intelligence) Completed  
-> **Next Immediate Phase:** Phase 6 (Voice & Conversational Editing)
+> **Current Phase:** Phase 6 (Voice & Conversational Editing) Completed  
+> **Next Immediate Phase:** Phase 7 (Trend Intelligence — Optional Style Recipes)
 
 ---
 
@@ -95,12 +95,12 @@ Foundations  Premium UI   Rendering   CV Intel    AI Director Cinematic   Voice/
 
 ---
 
-### 🟡 Phase 6 — Voice & Conversational Editing
-- [ ] Integrate local Whisper (`faster-whisper` / `whisper.cpp`) for speech-to-text.
-- [ ] Build frontend microphone voice-command capture component.
-- [ ] Implement conversational command parser (e.g. *"Replace clip 2 with the sunset"*, *"Make the cut faster"*).
-- [ ] Build timeline diff calculator and State History Manager (Undo / Redo support).
-- [ ] Implement partial re-rendering for edited timeline segments.
+### 🟢 Phase 6 — Voice & Conversational Editing
+- [x] Integrate local Whisper (`faster-whisper` / `whisper.cpp`) for speech-to-text.
+- [x] Build frontend microphone voice-command capture component.
+- [x] Implement conversational command parser (e.g. *"Replace clip 2 with the sunset"*, *"Make the cut faster"*).
+- [x] Build timeline diff calculator and State History Manager (Undo / Redo support).
+- [x] Implement partial re-rendering for edited timeline segments.
 
 ---
 

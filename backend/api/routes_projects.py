@@ -8,7 +8,12 @@ from fastapi import APIRouter, HTTPException
 
 from backend.api.config import utc_now_iso
 from backend.api.database import get_database
-from backend.api.schemas import ProjectCreate, ProjectResponse, ProjectUpdate
+from backend.api.schemas import (
+    ProjectCreate,
+    ProjectHistoryResponse,
+    ProjectResponse,
+    ProjectUpdate,
+)
 
 router = APIRouter(prefix="/projects", tags=["Projects"])
 
@@ -74,4 +79,22 @@ def delete_project(project_id: str) -> dict[str, str]:
     if not deleted:
         raise HTTPException(status_code=404, detail="Project not found.")
     return {"status": "deleted", "id": project_id}
+
+
+@router.get("/{project_id}/history", response_model=ProjectHistoryResponse)
+def get_project_revision_history(project_id: str) -> ProjectHistoryResponse:
+    """Return persistent timeline revisions and Undo/Redo state for a project."""
+    return get_database().get_project_history(project_id)
+
+
+@router.post("/{project_id}/undo", response_model=ProjectHistoryResponse)
+def undo_project_timeline(project_id: str) -> ProjectHistoryResponse:
+    """Step backwards one timeline revision in persistent SQLite history."""
+    return get_database().step_project_revision(project_id, -1)
+
+
+@router.post("/{project_id}/redo", response_model=ProjectHistoryResponse)
+def redo_project_timeline(project_id: str) -> ProjectHistoryResponse:
+    """Step forward one timeline revision in persistent SQLite history."""
+    return get_database().step_project_revision(project_id, 1)
 

@@ -4,10 +4,13 @@ from __future__ import annotations
 
 from fastapi import APIRouter, HTTPException
 
+from backend.ai_director.conversational_editor import apply_conversational_edit
 from backend.ai_director.director import DirectorNoFootageError, generate_director_plan
 from backend.ai_director.ollama_client import check_ollama_status
 from backend.api.config import get_settings
 from backend.api.schemas import (
+    ConversationalEditRequest,
+    ConversationalEditResponse,
     DirectorPlanRequest,
     DirectorPlanResponse,
     DirectorStatusResponse,
@@ -37,6 +40,17 @@ async def create_director_plan(request: DirectorPlanRequest) -> DirectorPlanResp
         return await generate_director_plan(request)
     except DirectorNoFootageError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.post("/edit", response_model=ConversationalEditResponse)
+async def edit_timeline_conversationally(
+    request: ConversationalEditRequest,
+) -> ConversationalEditResponse:
+    """Apply an iterative natural-language or voice edit, compute diffs, and push Undo/Redo history."""
+    try:
+        return await apply_conversational_edit(request)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 

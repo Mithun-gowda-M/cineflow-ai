@@ -66,6 +66,15 @@ class Settings(BaseSettings):
     OLLAMA_MODEL: str = "llama3.2:latest"
     OLLAMA_TIMEOUT_SECONDS: float = 12.0
 
+    # Local Speech-to-Text (faster-whisper - CPU INT8 offline)
+    WHISPER_MODEL: str = "tiny"
+    WHISPER_DEVICE: str = "cpu"
+    WHISPER_COMPUTE_TYPE: str = "int8"
+    WHISPER_LOCAL_FILES_ONLY: bool = False
+
+    # Partial Segment Render Caching
+    MAX_SEGMENT_CACHE_MB: int = 1024
+
     @property
     def cors_origins(self) -> list[str]:
         return [origin.strip() for origin in self.ALLOWED_ORIGINS.split(",") if origin.strip()]
@@ -78,6 +87,7 @@ class Settings(BaseSettings):
             self.PROXY_DIR,
             self.RENDER_DIR,
             self.CACHE_DIR,
+            self.CACHE_DIR / "segments",
             self.PROJECTS_DIR,
             self.DATABASE_PATH.parent,
         ):

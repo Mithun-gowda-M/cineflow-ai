@@ -5,9 +5,10 @@ from __future__ import annotations
 import json
 import sqlite3
 import threading
+import uuid
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Iterator, Optional
+from typing import Iterator, Literal, Optional
 
 from backend.api.config import get_settings, utc_now_iso
 from backend.api.schemas import (
@@ -16,9 +17,12 @@ from backend.api.schemas import (
     MediaAnalysisResult,
     MediaAsset,
     MediaMetadata,
+    ProjectHistoryResponse,
     ProjectResponse,
     RenderJobStatus,
+    TimelineDiffSummary,
     TimelinePlan,
+    TimelineRevisionRecord,
 )
 
 
@@ -108,18 +112,42 @@ class Database:
                     output_path TEXT,
                     output_video_url TEXT,
                     output_file_size_bytes INTEGER,
+                    segment_cache_hits INTEGER NOT NULL DEFAULT 0,
+                    segment_cache_misses INTEGER NOT NULL DEFAULT 0,
+                    partial_rerender_used INTEGER NOT NULL DEFAULT 0,
                     error_message TEXT,
                     created_at TEXT NOT NULL,
                     updated_at TEXT NOT NULL
                 );
+
+                CREATE TABLE IF NOT EXISTS timeline_revisions (
+                    revision_id TEXT PRIMARY KEY,
+                    project_id TEXT NOT NULL,
+                    revision_index INTEGER NOT NULL,
+                    command_text TEXT NOT NULL,
+                    diff_summary_json TEXT NOT NULL,
+                    timeline_json TEXT NOT NULL,
+                    is_active INTEGER NOT NULL DEFAULT 1,
+                    created_at TEXT NOT NULL
+                );
+                CREATE INDEX IF NOT EXISTS idx_revisions_project_idx
+                    ON timeline_revisions(project_id, revision_index);
                 """
             )
-            # Safe idempotent migration for pre-Phase 3/5 SQLite databases
+            # Safe idempotent migration for pre-Phase 3/5/6 SQLite databases
             cols = {r["name"] for r in conn.execute("PRAGMA table_info(media_assets)").fetchall()}
             if "analysis_json" not in cols:
                 conn.execute("ALTER TABLE media_assets ADD COLUMN analysis_json TEXT")
             if "audio_analysis_json" not in cols:
                 conn.execute("ALTER TABLE media_assets ADD COLUMN audio_analysis_json TEXT")
+
+            job_cols = {r["name"] for r in conn.execute("PRAGMA table_info(render_jobs)").fetchall()}
+            if "segment_cache_hits" not in job_cols:
+                conn.execute("ALTER TABLE render_jobs ADD COLUMN segment_cache_hits INTEGER NOT NULL DEFAULT 0")
+            if "segment_cache_misses" not in job_cols:
+                conn.execute("ALTER TABLE render_jobs ADD COLUMN segment_cache_misses INTEGER NOT NULL DEFAULT 0")
+            if "partial_rerender_used" not in job_cols:
+                conn.execute("ALTER TABLE render_jobs ADD COLUMN partial_rerender_used INTEGER NOT NULL DEFAULT 0")
 
     # ---- Media Assets ----
 
@@ -349,6 +377,7 @@ class Database:
     # ---- Render Jobs ----
 
     def _row_to_job(self, row: sqlite3.Row) -> RenderJobStatus:
+        keys = set(row.keys())
         return RenderJobStatus(
             job_id=row["job_id"],
             project_id=row["project_id"],
@@ -358,6 +387,9 @@ class Database:
             resolution=row["resolution"],
             output_video_url=row["output_video_url"],
             output_file_size_bytes=row["output_file_size_bytes"],
+            segment_cache_hits=row["segment_cache_hits"] if "segment_cache_hits" in keys else 0,
+            segment_cache_misses=row["segment_cache_misses"] if "segment_cache_misses" in keys else 0,
+            partial_rerender_used=bool(row["partial_rerender_used"]) if "partial_rerender_used" in keys else False,
             error_message=row["error_message"],
             created_at=row["created_at"],
             updated_at=row["updated_at"],
@@ -370,8 +402,9 @@ class Database:
                 INSERT INTO render_jobs (
                     job_id, project_id, status, progress_percent, current_step,
                     resolution, output_path, output_video_url, output_file_size_bytes,
+                    segment_cache_hits, segment_cache_misses, partial_rerender_used,
                     error_message, created_at, updated_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     job.job_id,
@@ -383,6 +416,9 @@ class Database:
                     output_path,
                     job.output_video_url,
                     job.output_file_size_bytes,
+                    job.segment_cache_hits,
+                    job.segment_cache_misses,
+                    int(job.partial_rerender_used),
                     job.error_message,
                     job.created_at,
                     job.updated_at,
@@ -400,6 +436,9 @@ class Database:
         output_path: Optional[str] = None,
         output_video_url: Optional[str] = None,
         output_file_size_bytes: Optional[int] = None,
+        segment_cache_hits: Optional[int] = None,
+        segment_cache_misses: Optional[int] = None,
+        partial_rerender_used: Optional[bool] = None,
         error_message: Optional[str] = None,
     ) -> Optional[RenderJobStatus]:
         fields: list[str] = []
@@ -411,6 +450,9 @@ class Database:
             "output_path": output_path,
             "output_video_url": output_video_url,
             "output_file_size_bytes": output_file_size_bytes,
+            "segment_cache_hits": segment_cache_hits,
+            "segment_cache_misses": segment_cache_misses,
+            "partial_rerender_used": int(partial_rerender_used) if partial_rerender_used is not None else None,
             "error_message": error_message,
         }
         for col, val in mapping.items():
@@ -451,6 +493,124 @@ class Database:
                 (utc_now_iso(),),
             )
             return cur.rowcount
+
+    # ---- Phase 6: Timeline Revisions (Undo / Redo State History) ----
+
+    def _row_to_revision(self, row: sqlite3.Row) -> TimelineRevisionRecord:
+        return TimelineRevisionRecord(
+            revision_id=row["revision_id"],
+            project_id=row["project_id"],
+            revision_index=row["revision_index"],
+            command_text=row["command_text"],
+            diff_summary=TimelineDiffSummary.model_validate_json(row["diff_summary_json"]),
+            timeline=TimelinePlan.model_validate_json(row["timeline_json"]),
+            created_at=row["created_at"],
+        )
+
+    def _build_history_response(self, conn: sqlite3.Connection, project_id: str) -> ProjectHistoryResponse:
+        rows = conn.execute(
+            "SELECT * FROM timeline_revisions WHERE project_id = ? ORDER BY revision_index ASC",
+            (project_id,),
+        ).fetchall()
+        revisions = [self._row_to_revision(r) for r in rows]
+        active_row = next((r for r in rows if r["is_active"]), rows[-1] if rows else None)
+        active_idx = active_row["revision_index"] if active_row else -1
+        total = len(revisions)
+        active_tl = TimelinePlan.model_validate_json(active_row["timeline_json"]) if active_row else None
+        return ProjectHistoryResponse(
+            project_id=project_id,
+            active_revision_index=max(0, active_idx),
+            total_revisions=total,
+            can_undo=(active_idx > 0),
+            can_redo=(0 <= active_idx < total - 1),
+            timeline=active_tl,
+            revisions=revisions,
+        )
+
+    def push_timeline_revision(
+        self,
+        project_id: str,
+        timeline: TimelinePlan,
+        command_text: str,
+        diff_summary: TimelineDiffSummary,
+    ) -> ProjectHistoryResponse:
+        with self._connect() as conn:
+            active = conn.execute(
+                "SELECT revision_index FROM timeline_revisions WHERE project_id = ? AND is_active = 1 ORDER BY revision_index DESC LIMIT 1",
+                (project_id,),
+            ).fetchone()
+            if active is not None:
+                active_idx = int(active["revision_index"])
+                conn.execute(
+                    "DELETE FROM timeline_revisions WHERE project_id = ? AND revision_index > ?",
+                    (project_id, active_idx),
+                )
+                next_idx = active_idx + 1
+            else:
+                max_row = conn.execute(
+                    "SELECT COALESCE(MAX(revision_index), -1) AS m FROM timeline_revisions WHERE project_id = ?",
+                    (project_id,),
+                ).fetchone()
+                next_idx = int(max_row["m"]) + 1 if max_row else 0
+
+            conn.execute(
+                "UPDATE timeline_revisions SET is_active = 0 WHERE project_id = ?",
+                (project_id,),
+            )
+            now = utc_now_iso()
+            conn.execute(
+                """
+                INSERT INTO timeline_revisions (
+                    revision_id, project_id, revision_index, command_text,
+                    diff_summary_json, timeline_json, is_active, created_at
+                ) VALUES (?, ?, ?, ?, ?, ?, 1, ?)
+                """,
+                (
+                    f"rev_{uuid.uuid4().hex[:12]}",
+                    project_id,
+                    next_idx,
+                    command_text,
+                    diff_summary.model_dump_json(),
+                    timeline.model_dump_json(),
+                    now,
+                ),
+            )
+            conn.execute(
+                "UPDATE projects SET timeline_json = ?, updated_at = ? WHERE id = ?",
+                (timeline.model_dump_json(), now, project_id),
+            )
+            return self._build_history_response(conn, project_id)
+
+    def get_project_history(self, project_id: str) -> ProjectHistoryResponse:
+        with self._connect() as conn:
+            return self._build_history_response(conn, project_id)
+
+    def step_project_revision(self, project_id: str, delta: Literal[-1, 1]) -> ProjectHistoryResponse:
+        with self._connect() as conn:
+            rows = conn.execute(
+                "SELECT * FROM timeline_revisions WHERE project_id = ? ORDER BY revision_index ASC",
+                (project_id,),
+            ).fetchall()
+            if not rows:
+                return self._build_history_response(conn, project_id)
+
+            active_row = next((r for r in rows if r["is_active"]), rows[-1])
+            target_idx = int(active_row["revision_index"]) + delta
+            if 0 <= target_idx < len(rows):
+                conn.execute(
+                    "UPDATE timeline_revisions SET is_active = 0 WHERE project_id = ?",
+                    (project_id,),
+                )
+                conn.execute(
+                    "UPDATE timeline_revisions SET is_active = 1 WHERE project_id = ? AND revision_index = ?",
+                    (project_id, target_idx),
+                )
+                target_tl_json = rows[target_idx]["timeline_json"]
+                conn.execute(
+                    "UPDATE projects SET timeline_json = ?, updated_at = ? WHERE id = ?",
+                    (target_tl_json, utc_now_iso(), project_id),
+                )
+            return self._build_history_response(conn, project_id)
 
 
 _db_instance: Optional[Database] = None

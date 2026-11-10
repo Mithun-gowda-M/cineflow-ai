@@ -1,7 +1,7 @@
 # PHASE 6 PLAN: Voice & Conversational Editing
 
 > **Phase:** 06 — Voice & Conversational Editing  
-> **Status:** READY FOR EXECUTION  
+> **Status:** COMPLETED  
 > **Goal:** Install `faster-whisper` cleanly in `backend/.venv`, build local Whisper speech-to-text & auto-captioning (`POST /api/v1/voice/transcribe`), implement incremental conversational editing (`POST /api/v1/director/edit`) with Ollama + deterministic command parser, compute timeline diffs & SQLite Undo/Redo revision history, accelerate re-exports with partial segment caching, and wire real microphone voice capture + Chat Copilot diff feedback into the Next.js Studio UI.
 
 ---
@@ -69,3 +69,4 @@ Run:
 ```bash
 /gsd-execute-phase 6
 ```
+

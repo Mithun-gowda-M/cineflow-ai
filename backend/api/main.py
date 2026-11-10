@@ -15,6 +15,7 @@ from backend.api.routes_director import router as director_router
 from backend.api.routes_media import router as media_router
 from backend.api.routes_projects import router as projects_router
 from backend.api.routes_render import router as render_router
+from backend.api.routes_voice import router as voice_router
 from backend.api.schemas import HardwareProfileInfo, HealthResponse
 from backend.video_engine.ffmpeg_runner import get_binary_info
 from backend.video_engine.hardware import detect_hardware_profile
@@ -60,6 +61,7 @@ def create_app() -> FastAPI:
     app.include_router(projects_router, prefix=api_prefix)
     app.include_router(render_router, prefix=api_prefix)
     app.include_router(director_router, prefix=api_prefix)
+    app.include_router(voice_router, prefix=api_prefix)
 
     @app.get(f"{api_prefix}/health", response_model=HealthResponse, tags=["System"])
     def health_check() -> HealthResponse:

@@ -125,6 +125,9 @@ export interface BackendRenderJob {
   resolution: string;
   output_video_url?: string | null;
   output_file_size_bytes?: number | null;
+  segment_cache_hits?: number;
+  segment_cache_misses?: number;
+  partial_rerender_used?: boolean;
   error_message?: string | null;
 }
 
@@ -280,6 +283,7 @@ export async function submitRenderJob(params: {
   cinematicEffects?: CinematicEffects;
   resolution: "720p" | "1080p" | "4k";
   encoderPreference: "auto" | "cpu" | "nvenc" | "qsv" | "amf";
+  partialCache?: boolean;
 }): Promise<BackendRenderJob> {
   const res = await fetch(`${API_BASE_URL}/render`, {
     method: "POST",
@@ -287,6 +291,7 @@ export async function submitRenderJob(params: {
     body: JSON.stringify({
       resolution: params.resolution,
       encoder_preference: params.encoderPreference,
+      partial_cache: params.partialCache ?? true,
       timeline: serializeTimelinePayload(params),
     }),
   });
@@ -482,5 +487,152 @@ export async function beatSyncTimeline(params: {
     throw new Error(errBody.detail || `Beat-sync failed (${res.status})`);
   }
   return (await res.json()) as BackendBeatSyncResponse;
+}
+
+// ---- Phase 6: Whisper Voice Transcription, Conversational Editing & History ----
+
+export interface BackendWhisperStatus {
+  package_installed: boolean;
+  model_name: string;
+  device: string;
+  compute_type: string;
+  model_cached: boolean;
+  ready: boolean;
+  ffmpeg_ready: boolean;
+  detail: string;
+}
+
+export interface BackendTranscriptionResponse {
+  text: string;
+  language: string;
+  duration_seconds: number;
+  engine: "faster_whisper" | "custom";
+  segments: {
+    id: string;
+    start_seconds: number;
+    end_seconds: number;
+    text: string;
+  }[];
+  suggested_subtitles: {
+    id: string;
+    start_seconds: number;
+    end_seconds: number;
+    text: string;
+    style: "cinematic_gold_bottom" | "bold_center_reel" | "subtle_white";
+  }[];
+}
+
+export interface BackendTimelineDiffSummary {
+  added_clip_ids: string[];
+  removed_clip_ids: string[];
+  modified_clip_ids: string[];
+  shifted_clip_ids: string[];
+  unchanged_clip_ids: string[];
+  global_visual_changed: boolean;
+  subtitles_changed: boolean;
+  audio_changed: boolean;
+  affected_segment_indices: number[];
+  changes: string[];
+}
+
+export interface BackendConversationalEditResponse {
+  engine_used: "ollama" | "rule_fallback";
+  instruction: string;
+  timeline: BackendDirectorPlanResponse["timeline"];
+  diff: BackendTimelineDiffSummary;
+  operations_applied: string[];
+  warnings: string[];
+  revision_index: number;
+  history_count: number;
+  can_undo: boolean;
+  can_redo: boolean;
+}
+
+export interface BackendProjectHistoryResponse {
+  project_id: string;
+  active_revision_index: number;
+  total_revisions: number;
+  can_undo: boolean;
+  can_redo: boolean;
+  timeline?: BackendDirectorPlanResponse["timeline"] | null;
+}
+
+export async function getVoiceStatus(): Promise<BackendWhisperStatus> {
+  const res = await fetch(`${API_BASE_URL}/voice/status`);
+  if (!res.ok) throw new Error(`Voice status error (${res.status})`);
+  return (await res.json()) as BackendWhisperStatus;
+}
+
+export async function transcribeVoiceBlob(blob: Blob): Promise<BackendTranscriptionResponse> {
+  const form = new FormData();
+  form.append("file", blob, "voice_command.webm");
+  const res = await fetch(`${API_BASE_URL}/voice/transcribe`, {
+    method: "POST",
+    body: form,
+  });
+  if (!res.ok) {
+    const errBody = await res.json().catch(() => ({ detail: res.statusText }));
+    throw new Error(errBody.detail || `Voice transcription failed (${res.status})`);
+  }
+  return (await res.json()) as BackendTranscriptionResponse;
+}
+
+export async function transcribeMediaSubtitles(
+  mediaId: string,
+  style: SubtitleCue["style"] = "cinematic_gold_bottom"
+): Promise<BackendTranscriptionResponse> {
+  const res = await fetch(
+    `${API_BASE_URL}/voice/subtitles/${encodeURIComponent(mediaId)}?style=${encodeURIComponent(style)}`,
+    { method: "POST" }
+  );
+  if (!res.ok) {
+    const errBody = await res.json().catch(() => ({ detail: res.statusText }));
+    throw new Error(errBody.detail || `Subtitle extraction failed (${res.status})`);
+  }
+  return (await res.json()) as BackendTranscriptionResponse;
+}
+
+export async function editTimelineConversationally(params: {
+  projectId: string;
+  instruction: string;
+  title: string;
+  aspectRatio: AspectRatio;
+  colorGrade: ColorGradePreset;
+  clips: TimelineClip[];
+  subtitles?: SubtitleCue[];
+  cinematicEffects?: CinematicEffects;
+}): Promise<BackendConversationalEditResponse> {
+  const res = await fetch(`${API_BASE_URL}/director/edit`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      project_id: params.projectId,
+      instruction: params.instruction,
+      timeline: serializeTimelinePayload(params),
+      use_llm: true,
+      record_history: true,
+    }),
+  });
+  if (!res.ok) {
+    const errBody = await res.json().catch(() => ({ detail: res.statusText }));
+    throw new Error(errBody.detail || `Conversational edit failed (${res.status})`);
+  }
+  return (await res.json()) as BackendConversationalEditResponse;
+}
+
+export async function undoProjectHistory(projectId: string): Promise<BackendProjectHistoryResponse> {
+  const res = await fetch(`${API_BASE_URL}/projects/${encodeURIComponent(projectId)}/undo`, {
+    method: "POST",
+  });
+  if (!res.ok) throw new Error(`Undo failed (${res.status})`);
+  return (await res.json()) as BackendProjectHistoryResponse;
+}
+
+export async function redoProjectHistory(projectId: string): Promise<BackendProjectHistoryResponse> {
+  const res = await fetch(`${API_BASE_URL}/projects/${encodeURIComponent(projectId)}/redo`, {
+    method: "POST",
+  });
+  if (!res.ok) throw new Error(`Redo failed (${res.status})`);
+  return (await res.json()) as BackendProjectHistoryResponse;
 }
 

@@ -17,14 +17,27 @@ import {
 } from "@/types";
 import {
   BackendAudioAnalysis,
+  BackendDirectorPlanResponse,
+  BackendMediaAsset,
   BackendStoryboardBeat,
   beatSyncTimeline,
   checkBackendHealth,
+  editTimelineConversationally,
   generateDirectorPlan,
   getAudioAnalysis,
   listMediaAssets,
   resolveBackendUrl,
+  transcribeMediaSubtitles,
 } from "@/lib/api";
+
+interface TimelineSnapshot {
+  clips: TimelineClip[];
+  subtitles: SubtitleCue[];
+  colorGrade: ColorGradePreset;
+  aspectRatio: AspectRatio;
+  cinematicEffects: CinematicEffects;
+  totalDuration: number;
+}
 
 export default function EditorStudioPage() {
   const [projectTitle, setProjectTitle] = useState("Deepavali 2026 Festival Highlights");
@@ -56,6 +69,8 @@ export default function EditorStudioPage() {
   } | null>(null);
   const [isBeatSyncing, setIsBeatSyncing] = useState<boolean>(false);
   const [beatSyncMessage, setBeatSyncMessage] = useState<string>("");
+  const [editDiffChanges, setEditDiffChanges] = useState<string[]>([]);
+  const [isCaptioning, setIsCaptioning] = useState<boolean>(false);
 
   // Initial timeline clips (realistic demo project data)
   const [clips, setClips] = useState<TimelineClip[]>([
@@ -168,30 +183,57 @@ export default function EditorStudioPage() {
     },
   ]);
 
-  // History Stack for functional Undo / Redo
-  const [history, setHistory] = useState<TimelineClip[][]>([]);
-  const [redoStack, setRedoStack] = useState<TimelineClip[][]>([]);
+  // Full Multi-Property History Stack for functional Undo / Redo
+  const [history, setHistory] = useState<TimelineSnapshot[]>([]);
+  const [redoStack, setRedoStack] = useState<TimelineSnapshot[]>([]);
 
-  const pushHistorySnapshot = (newClips: TimelineClip[]) => {
-    setHistory((prev) => [...prev, clips]);
+  const currentSnapshot = (): TimelineSnapshot => ({
+    clips,
+    subtitles,
+    colorGrade,
+    aspectRatio,
+    cinematicEffects,
+    totalDuration,
+  });
+
+  const applySnapshot = (snap: TimelineSnapshot) => {
+    setClips(snap.clips);
+    setSubtitles(snap.subtitles);
+    setColorGrade(snap.colorGrade);
+    setAspectRatio(snap.aspectRatio);
+    setCinematicEffects(snap.cinematicEffects);
+    setTotalDuration(snap.totalDuration);
+  };
+
+  const pushHistorySnapshot = (
+    nextClipsOrPatch: TimelineClip[] | Partial<TimelineSnapshot>
+  ) => {
+    const patch: Partial<TimelineSnapshot> = Array.isArray(nextClipsOrPatch)
+      ? { clips: nextClipsOrPatch }
+      : nextClipsOrPatch;
+    const prevSnap = currentSnapshot();
+    setHistory((prev) => [...prev, prevSnap]);
     setRedoStack([]);
-    setClips(newClips);
+    applySnapshot({
+      ...prevSnap,
+      ...patch,
+    });
   };
 
   const handleUndo = () => {
     if (history.length === 0) return;
     const previous = history[history.length - 1];
-    setRedoStack((prev) => [...prev, clips]);
+    setRedoStack((prev) => [...prev, currentSnapshot()]);
     setHistory((prev) => prev.slice(0, prev.length - 1));
-    setClips(previous);
+    applySnapshot(previous);
   };
 
   const handleRedo = () => {
     if (redoStack.length === 0) return;
     const next = redoStack[redoStack.length - 1];
-    setHistory((prev) => [...prev, clips]);
+    setHistory((prev) => [...prev, currentSnapshot()]);
     setRedoStack((prev) => prev.slice(0, prev.length - 1));
-    setClips(next);
+    applySnapshot(next);
   };
 
   // Playback timer ticker
@@ -236,7 +278,7 @@ export default function EditorStudioPage() {
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [history, redoStack, clips]);
+  });
 
   // Selected Clip object
   const selectedClip = clips.find((c) => c.id === selectedClipId) || null;
@@ -287,9 +329,89 @@ export default function EditorStudioPage() {
     setSelectedClipId(newClip.id);
   };
 
+  const hydrateTimelineSnapshot = (
+    backendTimeline: BackendDirectorPlanResponse["timeline"],
+    assetById: Map<string, BackendMediaAsset>
+  ): TimelineSnapshot => {
+    const nextClips: TimelineClip[] = backendTimeline.video_clips.map((vc) => {
+      const asset = assetById.get(vc.source_id);
+      return {
+        id: vc.clip_id,
+        sourceId: vc.source_id,
+        mediaKind: asset?.media_kind || "video",
+        title: vc.source_filename || asset?.original_filename || vc.source_id,
+        sourceUrl: resolveBackendUrl(vc.source_url || asset?.source_url),
+        proxyUrl: resolveBackendUrl(asset?.proxy_url),
+        thumbnailUrl:
+          resolveBackendUrl(vc.thumbnail_url || asset?.thumbnail_url) ||
+          "https://images.unsplash.com/photo-1514565131-fce0801e5785?auto=format&fit=crop&w=400&q=80",
+        trackId: "v1",
+        startTime: vc.timeline_start_seconds,
+        duration: vc.duration_seconds,
+        trimStart: vc.start_time_seconds,
+        trimEnd: vc.end_time_seconds,
+        speed: vc.playback_speed,
+        speedRamp: vc.speed_ramp || "none",
+        transition: (vc.transition_in?.type as TransitionType) || "crossfade",
+        qualityScore: vc.quality_score ?? 85,
+        tags: vc.tags,
+      };
+    });
+
+    for (const ac of backendTimeline.audio_tracks) {
+      const asset = assetById.get(ac.source_id);
+      if (asset?.audio_analysis) {
+        setAudioAnalysis({ sourceId: ac.source_id, data: asset.audio_analysis });
+      }
+      nextClips.push({
+        id: ac.id,
+        sourceId: ac.source_id,
+        mediaKind: "audio",
+        title: ac.name,
+        sourceUrl: resolveBackendUrl(ac.source_url || asset?.source_url),
+        thumbnailUrl: "",
+        trackId: "a2",
+        startTime: ac.timeline_start_seconds,
+        duration: ac.duration_seconds,
+        trimStart: ac.start_time_seconds,
+        trimEnd: ac.start_time_seconds + ac.duration_seconds,
+        speed: 1.0,
+        transition: "none",
+        qualityScore: 95,
+        tags: ["Audio"],
+      });
+    }
+
+    const nextSubs: SubtitleCue[] = backendTimeline.subtitles.map((s) => ({
+      id: s.id,
+      startTime: s.start_seconds,
+      duration: Math.max(0.5, s.end_seconds - s.start_seconds),
+      text: s.text,
+      style: s.style,
+    }));
+
+    return {
+      clips: nextClips,
+      subtitles: nextSubs,
+      colorGrade: backendTimeline.color_grade,
+      aspectRatio: backendTimeline.aspect_ratio,
+      cinematicEffects: backendTimeline.cinematic_effects
+        ? {
+            vignette: backendTimeline.cinematic_effects.vignette,
+            filmGrain: backendTimeline.cinematic_effects.film_grain,
+            kenBurnsOnImages: backendTimeline.cinematic_effects.ken_burns_on_images,
+            audioDucking: backendTimeline.cinematic_effects.audio_ducking,
+            loudnessNormalize: backendTimeline.cinematic_effects.loudness_normalize,
+          }
+        : cinematicEffects,
+      totalDuration: Math.max(5.0, backendTimeline.target_duration_seconds),
+    };
+  };
+
   // AI Directing Engine callback (real FastAPI planner when media & backend are ready, else local demo adjustment)
   const handleApplyAiPlan = async (instruction: string) => {
     setDirectorError("");
+    setEditDiffChanges([]);
     const health = await checkBackendHealth();
     if (health) {
       try {
@@ -301,83 +423,13 @@ export default function EditorStudioPage() {
             projectId: "proj_studio_01",
             instruction,
           });
-
-          const nextClips: TimelineClip[] = plan.timeline.video_clips.map((vc) => {
-            const asset = assetById.get(vc.source_id);
-            return {
-              id: vc.clip_id,
-              sourceId: vc.source_id,
-              mediaKind: asset?.media_kind || "video",
-              title: vc.source_filename || asset?.original_filename || vc.source_id,
-              sourceUrl: resolveBackendUrl(vc.source_url || asset?.source_url),
-              proxyUrl: resolveBackendUrl(asset?.proxy_url),
-              thumbnailUrl:
-                resolveBackendUrl(vc.thumbnail_url || asset?.thumbnail_url) ||
-                "https://images.unsplash.com/photo-1514565131-fce0801e5785?auto=format&fit=crop&w=400&q=80",
-              trackId: "v1",
-              startTime: vc.timeline_start_seconds,
-              duration: vc.duration_seconds,
-              trimStart: vc.start_time_seconds,
-              trimEnd: vc.end_time_seconds,
-              speed: vc.playback_speed,
-              speedRamp: vc.speed_ramp || "none",
-              transition: (vc.transition_in?.type as TransitionType) || "crossfade",
-              qualityScore: vc.quality_score ?? 85,
-              tags: vc.tags,
-            };
-          });
-
-          for (const ac of plan.timeline.audio_tracks) {
-            const asset = assetById.get(ac.source_id);
-            if (asset?.audio_analysis) {
-              setAudioAnalysis({ sourceId: ac.source_id, data: asset.audio_analysis });
-            }
-            nextClips.push({
-              id: ac.id,
-              sourceId: ac.source_id,
-              mediaKind: "audio",
-              title: ac.name,
-              sourceUrl: resolveBackendUrl(ac.source_url || asset?.source_url),
-              thumbnailUrl: "",
-              trackId: "a2",
-              startTime: ac.timeline_start_seconds,
-              duration: ac.duration_seconds,
-              trimStart: ac.start_time_seconds,
-              trimEnd: ac.start_time_seconds + ac.duration_seconds,
-              speed: 1.0,
-              transition: "none",
-              qualityScore: 95,
-              tags: ["Audio"],
-            });
-          }
-
-          const nextSubs: SubtitleCue[] = plan.timeline.subtitles.map((s) => ({
-            id: s.id,
-            startTime: s.start_seconds,
-            duration: Math.max(0.5, s.end_seconds - s.start_seconds),
-            text: s.text,
-            style: s.style === "bold_center_reel" ? "bold_center_reel" : "cinematic_gold_bottom",
-          }));
-
-          pushHistorySnapshot(nextClips);
-          setSubtitles(nextSubs);
+          const snap = hydrateTimelineSnapshot(plan.timeline, assetById);
+          pushHistorySnapshot(snap);
           setProjectTitle(plan.timeline.title);
-          setAspectRatio(plan.timeline.aspect_ratio);
-          setColorGrade(plan.timeline.color_grade);
-          if (plan.timeline.cinematic_effects) {
-            setCinematicEffects({
-              vignette: plan.timeline.cinematic_effects.vignette,
-              filmGrain: plan.timeline.cinematic_effects.film_grain,
-              kenBurnsOnImages: plan.timeline.cinematic_effects.ken_burns_on_images,
-              audioDucking: plan.timeline.cinematic_effects.audio_ducking,
-              loudnessNormalize: plan.timeline.cinematic_effects.loudness_normalize,
-            });
-          }
-          setTotalDuration(Math.max(5.0, plan.timeline.target_duration_seconds));
           setStoryboard(plan.storyboard);
           setDirectorEngine(plan.engine_used);
           setDirectorWarnings(plan.warnings);
-          if (nextClips.length > 0) setSelectedClipId(nextClips[0].id);
+          if (snap.clips.length > 0) setSelectedClipId(snap.clips[0].id);
           return;
         }
       } catch (err) {
@@ -432,6 +484,126 @@ export default function EditorStudioPage() {
     setDirectorWarnings(["Demo mode active: upload footage in Media Hub to run full AI storyboarding."]);
   };
 
+  // Phase 6 Conversational Editing handler (diff calculator + Undo/Redo snapshot)
+  const handleApplyConversationalEdit = async (instruction: string) => {
+    setDirectorError("");
+    const hasRealVisual = clips.some(
+      (c) => (c.trackId === "v1" || c.trackId === "v2") && Boolean(c.sourceId)
+    );
+    const health = hasRealVisual ? await checkBackendHealth() : null;
+
+    if (health && hasRealVisual) {
+      try {
+        const backendAssets = await listMediaAssets();
+        const assetById = new Map(backendAssets.map((a) => [a.id, a]));
+        const editRes = await editTimelineConversationally({
+          projectId: "proj_studio_01",
+          instruction,
+          title: projectTitle,
+          aspectRatio,
+          colorGrade,
+          clips,
+          subtitles,
+          cinematicEffects,
+        });
+        const snap = hydrateTimelineSnapshot(editRes.timeline, assetById);
+        pushHistorySnapshot(snap);
+        setEditDiffChanges(
+          editRes.diff.changes.length > 0 ? editRes.diff.changes : editRes.operations_applied
+        );
+        setDirectorEngine(editRes.engine_used);
+        setDirectorWarnings(editRes.warnings);
+        return;
+      } catch (err) {
+        setDirectorError(err instanceof Error ? err.message : "Conversational edit failed.");
+        return;
+      }
+    }
+
+    // Demo placeholder fallback for iterative edits
+    const lower = instruction.toLowerCase();
+    const nextPatch: Partial<TimelineSnapshot> = {};
+    const localDiffs: string[] = [];
+    if (lower.includes("bleach")) {
+      nextPatch.colorGrade = "bleach_bypass";
+      localDiffs.push("Changed color grade to 'bleach_bypass'");
+    } else if (lower.includes("golden") || lower.includes("warm")) {
+      nextPatch.colorGrade = "golden_hour";
+      localDiffs.push("Changed color grade to 'golden_hour'");
+    } else if (lower.includes("teal")) {
+      nextPatch.colorGrade = "cinematic_teal_orange";
+      localDiffs.push("Changed color grade to 'cinematic_teal_orange'");
+    }
+    if (lower.includes("vignette")) {
+      const enable = !lower.includes("remove") && !lower.includes("disable");
+      nextPatch.cinematicEffects = { ...cinematicEffects, vignette: enable };
+      localDiffs.push(`${enable ? "Enabled" : "Disabled"} optical vignette`);
+    }
+    if (lower.includes("grain")) {
+      const enable = !lower.includes("remove") && !lower.includes("disable");
+      nextPatch.cinematicEffects = {
+        ...(nextPatch.cinematicEffects || cinematicEffects),
+        filmGrain: enable,
+      };
+      localDiffs.push(`${enable ? "Enabled" : "Disabled"} 35mm film grain`);
+    }
+    if (lower.includes("9:16") || lower.includes("vertical") || lower.includes("reel")) {
+      nextPatch.aspectRatio = "9:16";
+      localDiffs.push("Switched aspect ratio to 9:16");
+    } else if (lower.includes("16:9") || lower.includes("landscape")) {
+      nextPatch.aspectRatio = "16:9";
+      localDiffs.push("Switched aspect ratio to 16:9");
+    }
+    if (lower.includes("faster") || lower.includes("speed up")) {
+      const sped = clips.map((c) =>
+        c.trackId === "v1"
+          ? { ...c, speed: Math.min(2.5, Number((c.speed * 1.25).toFixed(2))), duration: Number((c.duration * 0.8).toFixed(1)) }
+          : c
+      );
+      nextPatch.clips = sped;
+      localDiffs.push("Accelerated timeline pacing");
+    }
+    if (localDiffs.length > 0) {
+      pushHistorySnapshot(nextPatch);
+      setEditDiffChanges(localDiffs);
+      setDirectorEngine("demo");
+    } else {
+      setDirectorWarnings(["Demo mode: try 'Change to bleach bypass', 'Add vignette', 'Make it faster', or upload clips for full asset replacement."]);
+    }
+  };
+
+  const captionCandidateClip =
+    (selectedClip && selectedClip.sourceId && selectedClip.mediaKind !== "image"
+      ? selectedClip
+      : clips.find((c) => Boolean(c.sourceId) && c.mediaKind !== "image")) || null;
+
+  const handleAutoCaption = async () => {
+    if (!captionCandidateClip?.sourceId) return;
+    setIsCaptioning(true);
+    setDirectorError("");
+    try {
+      const res = await transcribeMediaSubtitles(captionCandidateClip.sourceId);
+      const offset = captionCandidateClip.trackId === "v1" ? captionCandidateClip.startTime : 0.0;
+      const newCues: SubtitleCue[] = res.suggested_subtitles.map((s) => ({
+        id: s.id,
+        startTime: Number((s.start_seconds + offset).toFixed(2)),
+        duration: Math.max(0.5, Number((s.end_seconds - s.start_seconds).toFixed(2))),
+        text: s.text,
+        style: s.style,
+      }));
+      if (newCues.length > 0) {
+        pushHistorySnapshot({ subtitles: [...subtitles, ...newCues] });
+        setEditDiffChanges([`Added ${newCues.length} Whisper subtitle cue(s) from '${captionCandidateClip.title}'`]);
+      } else {
+        setDirectorWarnings(["Whisper found no spoken words in selected clip."]);
+      }
+    } catch (err) {
+      setDirectorError(err instanceof Error ? err.message : "Auto-captioning failed.");
+    } finally {
+      setIsCaptioning(false);
+    }
+  };
+
   useEffect(() => {
     const audioClip = clips.find((c) => c.trackId === "a2" && Boolean(c.sourceId));
     if (!audioClip?.sourceId) return;
@@ -480,8 +652,10 @@ export default function EditorStudioPage() {
           trimEnd: match.end_time_seconds,
         };
       });
-      pushHistorySnapshot(nextClips);
-      setTotalDuration(Math.max(5.0, synced.timeline.target_duration_seconds));
+      pushHistorySnapshot({
+        clips: nextClips,
+        totalDuration: Math.max(5.0, synced.timeline.target_duration_seconds),
+      });
       setBeatSyncMessage(
         `Aligned ${synced.snapped_cuts} cut(s) to ${Math.round(synced.tempo_bpm)} BPM`
       );
@@ -501,11 +675,11 @@ export default function EditorStudioPage() {
       text,
       style,
     };
-    setSubtitles((prev) => [...prev, newSub]);
+    pushHistorySnapshot({ subtitles: [...subtitles, newSub] });
   };
 
   const handleDeleteSubtitle = (id: string) => {
-    setSubtitles((prev) => prev.filter((s) => s.id !== id));
+    pushHistorySnapshot({ subtitles: subtitles.filter((s) => s.id !== id) });
   };
 
   return (
@@ -554,13 +728,15 @@ export default function EditorStudioPage() {
           onUpdateClip={handleUpdateClip}
           onDeleteClip={handleDeleteClip}
           onApplyAiPlan={handleApplyAiPlan}
+          onApplyConversationalEdit={handleApplyConversationalEdit}
+          editDiffChanges={editDiffChanges}
           isCollapsed={isAiDrawerCollapsed}
           onToggleCollapse={() => setIsAiDrawerCollapsed(!isAiDrawerCollapsed)}
           globalColorGrade={colorGrade}
-          onUpdateGlobalColorGrade={setColorGrade}
+          onUpdateGlobalColorGrade={(g) => pushHistorySnapshot({ colorGrade: g })}
           cinematicEffects={cinematicEffects}
           onUpdateCinematicEffects={(updates) =>
-            setCinematicEffects((prev) => ({ ...prev, ...updates }))
+            pushHistorySnapshot({ cinematicEffects: { ...cinematicEffects, ...updates } })
           }
           onSnapToBeats={handleSnapToBeats}
           hasAudioTrack={Boolean(primaryAudioSourceId)}
@@ -569,6 +745,9 @@ export default function EditorStudioPage() {
           subtitles={subtitles}
           onAddSubtitle={handleAddSubtitle}
           onDeleteSubtitle={handleDeleteSubtitle}
+          onAutoCaption={handleAutoCaption}
+          canAutoCaption={Boolean(captionCandidateClip)}
+          isCaptioning={isCaptioning}
           storyboard={storyboard}
           directorEngine={directorEngine}
           directorWarnings={directorWarnings}

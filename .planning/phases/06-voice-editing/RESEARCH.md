@@ -46,3 +46,4 @@ Inspecting `backend/video_engine/filtergraph.py` and `backend/rendering/renderer
 - Replaces the Phase 1 simulated `setTimeout` microphone stub in `AiDirectorDrawer.tsx` with a real [`VoiceCommandButton`](file:///c:/Users/mithu/ai%20video%20editing/apps/web/src/components/editor/VoiceCommandButton.tsx) supporting:
   1. **Whisper Microphone Capture:** `navigator.mediaDevices.getUserMedia` + `MediaRecorder` uploading audio blobs to `POST /api/v1/voice/transcribe` when local Whisper is ready.
   2. **Browser Web Speech API Fallback:** Live `SpeechRecognition` / `webkitSpeechRecognition` dictation when offline without local Whisper model weights.
+

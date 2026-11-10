@@ -58,6 +58,7 @@ class RenderJobManager:
         settings = get_settings()
         sem = self._get_semaphore()
         process_holder: dict = {}
+        stats_holder: dict = {}
         self._processes[job_id] = process_holder
 
         def on_progress(pct: float, step: str) -> None:
@@ -85,6 +86,7 @@ class RenderJobManager:
                     request=request,
                     on_progress=on_progress,
                     process_holder=process_holder,
+                    stats_holder=stats_holder,
                 )
                 if job_id in self._cancelled:
                     output_path.unlink(missing_ok=True)
@@ -98,6 +100,9 @@ class RenderJobManager:
                     output_path=str(output_path),
                     output_video_url=f"/api/v1/render/{job_id}/download",
                     output_file_size_bytes=file_size,
+                    segment_cache_hits=stats_holder.get("segment_cache_hits", 0),
+                    segment_cache_misses=stats_holder.get("segment_cache_misses", 0),
+                    partial_rerender_used=stats_holder.get("partial_rerender_used", False),
                 )
         except asyncio.CancelledError:
             partial = settings.RENDER_DIR / f"{job_id}.mp4"

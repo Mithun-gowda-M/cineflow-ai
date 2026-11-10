@@ -23,6 +23,7 @@
 ## 🌊 Wave-Based Task Breakdown
 
 ### Wave 1 — Dependencies, Schemas & Librosa Audio Intelligence
+
 - **Task 5.1: Install Librosa & Extend Schemas/DB**
   - Install `librosa` and `soundfile` in `backend/.venv`.
   - Extend `backend/api/schemas.py` (`ColorGradePreset` adds `"bleach_bypass"`; `SpeedRampPreset`, `CinematicEffects`, `AudioAnalysisResult`, `BeatSyncRequest`, `BeatSyncResponse`) and update `backend/api/database.py` with `audio_analysis_json` migration.
@@ -31,6 +32,7 @@
   - **Target File:** `backend/audio_engine/analyzer.py`
 
 ### Wave 2 — Beat Sync, Animated Typography, Speed Ramps & Sidechain Ducking
+
 - **Task 5.3: Beat-Synchronized Cut Aligner**
   - Implement `align_timeline_to_beats(...)` aligning clip cuts/transitions to musical beats & downbeats cleanly while preserving source trim bounds and anti-duplication guarantees.
   - **Target File:** `backend/audio_engine/beat_sync.py`
@@ -40,6 +42,7 @@
   - Upgrade `backend/audio_engine/mixer.py` with `sidechaincompress` ducking and `loudnorm` loudness normalization.
 
 ### Wave 3 — API Routes, Director Integration, Frontend Studio & Automated Tests
+
 - **Task 5.5: FastAPI Audio Routes & Automatic Audio Analysis**
   - Auto-run `analyze_audio_file` when audio assets are ingested (`routes_media.py` / `pipeline.py`).
   - Create `backend/api/routes_audio.py` (`/audio/{id}/analyze`, `/audio/{id}/analysis`, `/audio/beat-sync`) and register in `main.py`; wire optional beat sync into `ai_director/director.py`.
@@ -65,7 +68,7 @@
 ## 🚀 Execution Command
 
 Run:
+
 ```bash
 /gsd-execute-phase 5
 ```
-

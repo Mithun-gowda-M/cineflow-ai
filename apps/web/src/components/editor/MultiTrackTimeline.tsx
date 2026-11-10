@@ -16,6 +16,9 @@ interface MultiTrackTimelineProps {
   onSeek: (time: number) => void;
   selectedClipId: string | null;
   onSelectClip: (clip: TimelineClip) => void;
+  waveformPeaks?: number[];
+  beatTimestamps?: number[];
+  tempoBpm?: number | null;
 }
 
 export const MultiTrackTimeline: React.FC<MultiTrackTimelineProps> = ({
@@ -26,6 +29,9 @@ export const MultiTrackTimeline: React.FC<MultiTrackTimelineProps> = ({
   onSeek,
   selectedClipId,
   onSelectClip,
+  waveformPeaks,
+  beatTimestamps,
+  tempoBpm,
 }) => {
   const rulerRef = useRef<HTMLDivElement>(null);
   const [zoomLevel, setZoomLevel] = useState<number>(10); // pixels per second
@@ -241,6 +247,7 @@ export const MultiTrackTimeline: React.FC<MultiTrackTimelineProps> = ({
                         <span className="text-[11px] font-bold text-white truncate">{clip.title}</span>
                       </div>
                       <span className="text-[9px] font-mono text-cine-gold-300 shrink-0">
+                        {clip.speedRamp && clip.speedRamp !== "none" ? `⚡ ` : ""}
                         {clip.duration.toFixed(1)}s
                       </span>
                     </div>
@@ -263,18 +270,40 @@ export const MultiTrackTimeline: React.FC<MultiTrackTimelineProps> = ({
                 ))}
             </div>
 
-            {/* Track A2 Music with Beat Grid */}
+            {/* Track A2 Music with Real Librosa Waveform & Beat Markers */}
             <div className="h-10 border-b border-cine-border/20 relative timeline-track-grid bg-cine-black/60 flex items-center px-2 overflow-hidden">
-              <div className="absolute inset-0 flex items-center justify-around opacity-40 pointer-events-none">
-                {Array.from({ length: 40 }).map((_, i) => (
+              <div className="absolute inset-0 flex items-end gap-[2px] px-1 py-1.5 opacity-55 pointer-events-none">
+                {(waveformPeaks && waveformPeaks.length > 0
+                  ? waveformPeaks
+                  : Array.from({ length: 48 }).map((_, i) => (i % 4 === 0 ? 0.85 : 0.4))
+                ).map((amp, i) => (
                   <div
                     key={i}
-                    className={`w-0.5 rounded-full ${i % 4 === 0 ? "h-6 bg-cine-gold-400" : "h-3 bg-cine-cyan-400"}`}
+                    className={`flex-1 rounded-full ${
+                      i % 4 === 0 ? "bg-cine-gold-400" : "bg-cine-cyan-400"
+                    }`}
+                    style={{ height: `${Math.max(14, Math.min(100, Math.round(amp * 100)))}%` }}
                   />
                 ))}
               </div>
-              <span className="text-[10px] font-mono text-cine-cyan-400 font-semibold relative z-10">
-                A2 • Librosa Beat-Synced Soundtrack (124 BPM)
+              {beatTimestamps &&
+                beatTimestamps
+                  .filter((b) => b >= 0 && b <= totalDuration)
+                  .slice(0, 120)
+                  .map((beatSec, idx) => (
+                    <div
+                      key={`${beatSec}-${idx}`}
+                      className={`absolute top-0 bottom-0 pointer-events-none ${
+                        idx % 4 === 0
+                          ? "w-[1.5px] bg-cine-gold-400/75"
+                          : "w-px bg-cine-cyan-400/35"
+                      }`}
+                      style={{ left: `${beatSec * zoomLevel}px` }}
+                    />
+                  ))}
+              <span className="text-[10px] font-mono text-cine-cyan-300 font-semibold relative z-10 bg-cine-black/70 px-1.5 py-0.5 rounded">
+                A2 • {clips.find((c) => c.trackId === "a2")?.title || "Librosa Beat-Synced Soundtrack"}{" "}
+                ({tempoBpm && tempoBpm > 0 ? `${Math.round(tempoBpm)} BPM` : "124 BPM"})
               </span>
             </div>
 

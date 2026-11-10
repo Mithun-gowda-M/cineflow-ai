@@ -7,11 +7,21 @@ import { VideoPreviewCanvas } from "@/components/editor/VideoPreviewCanvas";
 import { AiDirectorDrawer } from "@/components/editor/AiDirectorDrawer";
 import { MultiTrackTimeline } from "@/components/editor/MultiTrackTimeline";
 import { ExportModal } from "@/components/editor/ExportModal";
-import { AspectRatio, ColorGradePreset, TimelineClip, SubtitleCue, TransitionType } from "@/types";
 import {
+  AspectRatio,
+  CinematicEffects,
+  ColorGradePreset,
+  TimelineClip,
+  SubtitleCue,
+  TransitionType,
+} from "@/types";
+import {
+  BackendAudioAnalysis,
   BackendStoryboardBeat,
+  beatSyncTimeline,
   checkBackendHealth,
   generateDirectorPlan,
+  getAudioAnalysis,
   listMediaAssets,
   resolveBackendUrl,
 } from "@/lib/api";
@@ -33,6 +43,19 @@ export default function EditorStudioPage() {
   const [directorEngine, setDirectorEngine] = useState<"ollama" | "rule_fallback" | "demo" | null>(null);
   const [directorWarnings, setDirectorWarnings] = useState<string[]>([]);
   const [directorError, setDirectorError] = useState<string>("");
+  const [cinematicEffects, setCinematicEffects] = useState<CinematicEffects>({
+    vignette: false,
+    filmGrain: false,
+    kenBurnsOnImages: true,
+    audioDucking: true,
+    loudnessNormalize: true,
+  });
+  const [audioAnalysis, setAudioAnalysis] = useState<{
+    sourceId: string;
+    data: BackendAudioAnalysis;
+  } | null>(null);
+  const [isBeatSyncing, setIsBeatSyncing] = useState<boolean>(false);
+  const [beatSyncMessage, setBeatSyncMessage] = useState<string>("");
 
   // Initial timeline clips (realistic demo project data)
   const [clips, setClips] = useState<TimelineClip[]>([
@@ -297,6 +320,7 @@ export default function EditorStudioPage() {
               trimStart: vc.start_time_seconds,
               trimEnd: vc.end_time_seconds,
               speed: vc.playback_speed,
+              speedRamp: vc.speed_ramp || "none",
               transition: (vc.transition_in?.type as TransitionType) || "crossfade",
               qualityScore: vc.quality_score ?? 85,
               tags: vc.tags,
@@ -305,6 +329,9 @@ export default function EditorStudioPage() {
 
           for (const ac of plan.timeline.audio_tracks) {
             const asset = assetById.get(ac.source_id);
+            if (asset?.audio_analysis) {
+              setAudioAnalysis({ sourceId: ac.source_id, data: asset.audio_analysis });
+            }
             nextClips.push({
               id: ac.id,
               sourceId: ac.source_id,
@@ -337,6 +364,15 @@ export default function EditorStudioPage() {
           setProjectTitle(plan.timeline.title);
           setAspectRatio(plan.timeline.aspect_ratio);
           setColorGrade(plan.timeline.color_grade);
+          if (plan.timeline.cinematic_effects) {
+            setCinematicEffects({
+              vignette: plan.timeline.cinematic_effects.vignette,
+              filmGrain: plan.timeline.cinematic_effects.film_grain,
+              kenBurnsOnImages: plan.timeline.cinematic_effects.ken_burns_on_images,
+              audioDucking: plan.timeline.cinematic_effects.audio_ducking,
+              loudnessNormalize: plan.timeline.cinematic_effects.loudness_normalize,
+            });
+          }
           setTotalDuration(Math.max(5.0, plan.timeline.target_duration_seconds));
           setStoryboard(plan.storyboard);
           setDirectorEngine(plan.engine_used);
@@ -396,6 +432,82 @@ export default function EditorStudioPage() {
     setDirectorWarnings(["Demo mode active: upload footage in Media Hub to run full AI storyboarding."]);
   };
 
+  useEffect(() => {
+    const audioClip = clips.find((c) => c.trackId === "a2" && Boolean(c.sourceId));
+    if (!audioClip?.sourceId) return;
+    if (audioAnalysis && audioAnalysis.sourceId === audioClip.sourceId) return;
+
+    let cancelled = false;
+    checkBackendHealth().then((health) => {
+      if (!health || cancelled) return;
+      getAudioAnalysis(audioClip.sourceId!)
+        .then((res) => {
+          if (!cancelled) setAudioAnalysis({ sourceId: audioClip.sourceId!, data: res });
+        })
+        .catch(() => {});
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [clips, audioAnalysis]);
+
+  const primaryAudioSourceId = clips.find((c) => c.trackId === "a2" && Boolean(c.sourceId))?.sourceId;
+
+  const handleSnapToBeats = async () => {
+    if (!primaryAudioSourceId) return;
+    setIsBeatSyncing(true);
+    setBeatSyncMessage("");
+    try {
+      const synced = await beatSyncTimeline({
+        projectId: "proj_studio_01",
+        title: projectTitle,
+        aspectRatio,
+        colorGrade,
+        clips,
+        audioSourceId: primaryAudioSourceId,
+        subtitles,
+        cinematicEffects,
+      });
+      const syncedById = new Map(synced.timeline.video_clips.map((vc) => [vc.clip_id, vc]));
+      const nextClips = clips.map((clip) => {
+        const match = syncedById.get(clip.id);
+        if (!match) return clip;
+        return {
+          ...clip,
+          startTime: match.timeline_start_seconds,
+          duration: match.duration_seconds,
+          trimStart: match.start_time_seconds,
+          trimEnd: match.end_time_seconds,
+        };
+      });
+      pushHistorySnapshot(nextClips);
+      setTotalDuration(Math.max(5.0, synced.timeline.target_duration_seconds));
+      setBeatSyncMessage(
+        `Aligned ${synced.snapped_cuts} cut(s) to ${Math.round(synced.tempo_bpm)} BPM`
+      );
+    } catch (err) {
+      setBeatSyncMessage(err instanceof Error ? err.message : "Beat-sync failed.");
+    } finally {
+      setIsBeatSyncing(false);
+    }
+  };
+
+  const handleAddSubtitle = (text: string, style: SubtitleCue["style"]) => {
+    const startTime = Math.max(0, Number(currentTime.toFixed(2)));
+    const newSub: SubtitleCue = {
+      id: `sub_${Date.now()}`,
+      startTime,
+      duration: 3.5,
+      text,
+      style,
+    };
+    setSubtitles((prev) => [...prev, newSub]);
+  };
+
+  const handleDeleteSubtitle = (id: string) => {
+    setSubtitles((prev) => prev.filter((s) => s.id !== id));
+  };
+
   return (
     <div className="h-screen w-screen flex flex-col bg-cine-black overflow-hidden select-none">
       {/* Top Header */}
@@ -426,6 +538,7 @@ export default function EditorStudioPage() {
         <VideoPreviewCanvas
           aspectRatio={aspectRatio}
           colorGrade={colorGrade}
+          cinematicEffects={cinematicEffects}
           currentTime={currentTime}
           totalDuration={totalDuration}
           isPlaying={isPlaying}
@@ -445,6 +558,17 @@ export default function EditorStudioPage() {
           onToggleCollapse={() => setIsAiDrawerCollapsed(!isAiDrawerCollapsed)}
           globalColorGrade={colorGrade}
           onUpdateGlobalColorGrade={setColorGrade}
+          cinematicEffects={cinematicEffects}
+          onUpdateCinematicEffects={(updates) =>
+            setCinematicEffects((prev) => ({ ...prev, ...updates }))
+          }
+          onSnapToBeats={handleSnapToBeats}
+          hasAudioTrack={Boolean(primaryAudioSourceId)}
+          isBeatSyncing={isBeatSyncing}
+          beatSyncMessage={beatSyncMessage}
+          subtitles={subtitles}
+          onAddSubtitle={handleAddSubtitle}
+          onDeleteSubtitle={handleDeleteSubtitle}
           storyboard={storyboard}
           directorEngine={directorEngine}
           directorWarnings={directorWarnings}
@@ -461,6 +585,9 @@ export default function EditorStudioPage() {
         onSeek={setCurrentTime}
         selectedClipId={selectedClipId}
         onSelectClip={(clip) => setSelectedClipId(clip.id)}
+        waveformPeaks={audioAnalysis?.data.waveform_peaks}
+        beatTimestamps={audioAnalysis?.data.beat_timestamps}
+        tempoBpm={audioAnalysis?.data.tempo_bpm}
       />
 
       {/* Export Render Modal */}
@@ -472,6 +599,8 @@ export default function EditorStudioPage() {
         colorGrade={colorGrade}
         durationSeconds={totalDuration}
         clips={clips}
+        subtitles={subtitles}
+        cinematicEffects={cinematicEffects}
       />
     </div>
   );

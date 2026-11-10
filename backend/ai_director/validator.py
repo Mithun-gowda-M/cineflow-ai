@@ -102,3 +102,4 @@ def validate_and_sanitize_timeline(
         }
     )
     return final_timeline, clean_beats, warnings
+

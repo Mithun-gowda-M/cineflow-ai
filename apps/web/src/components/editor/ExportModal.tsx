@@ -5,7 +5,7 @@ import Link from "next/link";
 import { Download, Sparkles, CheckCircle2, AlertCircle, RefreshCw, XCircle } from "lucide-react";
 import { Modal } from "@/components/ui/Modal";
 import { GoldButton } from "@/components/ui/GoldButton";
-import { AspectRatio, ColorGradePreset, TimelineClip } from "@/types";
+import { AspectRatio, CinematicEffects, ColorGradePreset, SubtitleCue, TimelineClip } from "@/types";
 import {
   cancelRenderJob,
   checkBackendHealth,
@@ -23,6 +23,8 @@ interface ExportModalProps {
   colorGrade: ColorGradePreset;
   durationSeconds: number;
   clips: TimelineClip[];
+  subtitles?: SubtitleCue[];
+  cinematicEffects?: CinematicEffects;
 }
 
 export const ExportModal: React.FC<ExportModalProps> = ({
@@ -34,6 +36,8 @@ export const ExportModal: React.FC<ExportModalProps> = ({
   colorGrade,
   durationSeconds,
   clips,
+  subtitles,
+  cinematicEffects,
 }) => {
   const [resolution, setResolution] = useState<"720p" | "1080p" | "4k">("1080p");
   const [encoderProfile, setEncoderProfile] = useState<"auto" | "cpu">("auto");
@@ -83,6 +87,8 @@ export const ExportModal: React.FC<ExportModalProps> = ({
         aspectRatio,
         colorGrade,
         clips,
+        subtitles,
+        cinematicEffects,
         resolution,
         encoderPreference: encoderProfile,
       });

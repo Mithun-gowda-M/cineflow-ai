@@ -143,3 +143,4 @@ def test_validator_drops_hallucinated_and_duplicate_segments_and_clamps_bounds()
     assert clean_tl.video_clips[0].end_time_seconds == 5.0
     assert any("unknown" in w.lower() for w in val_warnings)
     assert any("duplicate" in w.lower() for w in val_warnings)
+

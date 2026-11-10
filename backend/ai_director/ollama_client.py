@@ -276,3 +276,4 @@ async def plan_with_ollama(
         subtitles=subtitles,
     )
     return timeline, beats, warnings
+

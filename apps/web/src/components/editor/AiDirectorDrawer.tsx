@@ -14,10 +14,20 @@ import {
   RefreshCw,
   AlertCircle,
   Film,
+  Music,
+  Type,
+  Plus,
 } from "lucide-react";
 import { GoldButton } from "@/components/ui/GoldButton";
 import { Badge } from "@/components/ui/Badge";
-import { TimelineClip, TransitionType, ColorGradePreset } from "@/types";
+import {
+  CinematicEffects,
+  ColorGradePreset,
+  SpeedRampPreset,
+  SubtitleCue,
+  TimelineClip,
+  TransitionType,
+} from "@/types";
 import { BackendStoryboardBeat } from "@/lib/api";
 
 interface AiDirectorDrawerProps {
@@ -29,6 +39,15 @@ interface AiDirectorDrawerProps {
   onToggleCollapse: () => void;
   globalColorGrade: ColorGradePreset;
   onUpdateGlobalColorGrade: (grade: ColorGradePreset) => void;
+  cinematicEffects?: CinematicEffects;
+  onUpdateCinematicEffects?: (updates: Partial<CinematicEffects>) => void;
+  onSnapToBeats?: () => Promise<void> | void;
+  hasAudioTrack?: boolean;
+  isBeatSyncing?: boolean;
+  beatSyncMessage?: string;
+  subtitles?: SubtitleCue[];
+  onAddSubtitle?: (text: string, style: SubtitleCue["style"]) => void;
+  onDeleteSubtitle?: (id: string) => void;
   storyboard?: BackendStoryboardBeat[];
   directorEngine?: "ollama" | "rule_fallback" | "demo" | null;
   directorWarnings?: string[];
@@ -44,6 +63,15 @@ export const AiDirectorDrawer: React.FC<AiDirectorDrawerProps> = ({
   onToggleCollapse,
   globalColorGrade,
   onUpdateGlobalColorGrade,
+  cinematicEffects,
+  onUpdateCinematicEffects,
+  onSnapToBeats,
+  hasAudioTrack = false,
+  isBeatSyncing = false,
+  beatSyncMessage = "",
+  subtitles = [],
+  onAddSubtitle,
+  onDeleteSubtitle,
   storyboard = [],
   directorEngine = null,
   directorWarnings = [],
@@ -52,6 +80,8 @@ export const AiDirectorDrawer: React.FC<AiDirectorDrawerProps> = ({
   const [prompt, setPrompt] = useState("");
   const [isListening, setIsListening] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [subText, setSubText] = useState("");
+  const [subStyle, setSubStyle] = useState<SubtitleCue["style"]>("cinematic_gold_bottom");
 
   const handleSendPrompt = async (textToSend?: string) => {
     const text = textToSend || prompt;
@@ -250,6 +280,8 @@ export const AiDirectorDrawer: React.FC<AiDirectorDrawerProps> = ({
               { id: "cinematic_teal_orange", label: "Teal & Orange" },
               { id: "moody_dark", label: "Moody Dark" },
               { id: "vintage_film", label: "Vintage Film" },
+              { id: "bleach_bypass", label: "Bleach Bypass" },
+              { id: "high_contrast_bw", label: "High Contrast B&W" },
             ] as { id: ColorGradePreset; label: string }[]
           ).map((g) => (
             <button
@@ -265,6 +297,49 @@ export const AiDirectorDrawer: React.FC<AiDirectorDrawerProps> = ({
             </button>
           ))}
         </div>
+
+        {/* Cinematic Post-Processing & Beat-Sync Controls */}
+        {cinematicEffects && onUpdateCinematicEffects && (
+          <div className="pt-2 border-t border-cine-border/50 space-y-2">
+            <div className="grid grid-cols-2 gap-1.5 text-[11px]">
+              {[
+                { key: "vignette" as const, label: "Vignette" },
+                { key: "filmGrain" as const, label: "35mm Grain" },
+                { key: "kenBurnsOnImages" as const, label: "Ken Burns" },
+                { key: "audioDucking" as const, label: "Audio Ducking" },
+              ].map((opt) => (
+                <button
+                  key={opt.key}
+                  onClick={() => onUpdateCinematicEffects({ [opt.key]: !cinematicEffects[opt.key] })}
+                  className={`px-2 py-1 rounded border text-left transition-colors ${
+                    cinematicEffects[opt.key]
+                      ? "bg-cine-cyan-500/20 border-cine-cyan-500/50 text-cine-cyan-300 font-semibold"
+                      : "bg-cine-black/50 border-cine-border text-gray-400 hover:text-white"
+                  }`}
+                >
+                  {cinematicEffects[opt.key] ? "✓ " : ""}
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+
+            {onSnapToBeats && (
+              <div className="space-y-1">
+                <button
+                  onClick={() => onSnapToBeats()}
+                  disabled={!hasAudioTrack || isBeatSyncing}
+                  className="w-full py-1.5 px-2.5 rounded bg-cine-cyan-500/15 border border-cine-cyan-500/40 text-cine-cyan-300 hover:bg-cine-cyan-500/25 disabled:opacity-40 disabled:cursor-not-allowed text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors"
+                >
+                  <Music className="w-3.5 h-3.5" />
+                  {isBeatSyncing ? "Snapping Cuts to Beats..." : "Snap Cuts to Music Beats"}
+                </button>
+                {beatSyncMessage && (
+                  <p className="text-[10px] text-cine-cyan-300 font-mono text-center">{beatSyncMessage}</p>
+                )}
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Clip Properties Inspector */}
@@ -289,7 +364,7 @@ export const AiDirectorDrawer: React.FC<AiDirectorDrawerProps> = ({
 
             <div>
               <div className="flex items-center justify-between text-xs text-gray-300 mb-1">
-                <span>Speed Ramp:</span>
+                <span>Playback Speed:</span>
                 <span className="font-mono text-cine-gold-400 font-bold">{selectedClip.speed}x</span>
               </div>
               <input
@@ -301,6 +376,22 @@ export const AiDirectorDrawer: React.FC<AiDirectorDrawerProps> = ({
                 onChange={(e) => onUpdateClip(selectedClip.id, { speed: Number(e.target.value) })}
                 className="w-full accent-cine-gold-500 cursor-pointer h-1 bg-cine-black rounded"
               />
+            </div>
+
+            <div>
+              <label className="text-xs text-gray-300 block mb-1">Speed Ramp Curve</label>
+              <select
+                value={selectedClip.speedRamp || "none"}
+                onChange={(e) =>
+                  onUpdateClip(selectedClip.id, { speedRamp: e.target.value as SpeedRampPreset })
+                }
+                className="w-full p-1.5 rounded bg-cine-black border border-cine-border text-xs text-white focus:outline-none focus:border-cine-gold-500"
+              >
+                <option value="none">Linear Speed</option>
+                <option value="fast_to_slow">Action Hero (Fast → Slow)</option>
+                <option value="slow_to_fast">Momentum Build (Slow → Fast)</option>
+                <option value="ease_in_out">Smooth Ease In / Out</option>
+              </select>
             </div>
 
             <div>
@@ -331,6 +422,72 @@ export const AiDirectorDrawer: React.FC<AiDirectorDrawerProps> = ({
         ) : (
           <div className="text-center py-8 text-gray-500 text-xs">
             <p>Click any clip on the timeline below to inspect and trim its properties.</p>
+          </div>
+        )}
+
+        {/* Burned-In Animated Titles (ASS Typography) */}
+        {onAddSubtitle && (
+          <div className="pt-3 mt-3 border-t border-cine-border space-y-2">
+            <div className="flex items-center justify-between text-xs text-gray-300 font-semibold">
+              <span className="flex items-center gap-1.5">
+                <Type className="w-3.5 h-3.5 text-purple-400" /> Burned-In Titles (T1)
+              </span>
+              <span className="text-[10px] text-gray-500 font-mono">{subtitles.length} cues</span>
+            </div>
+
+            <div className="space-y-1.5">
+              <input
+                type="text"
+                value={subText}
+                onChange={(e) => setSubText(e.target.value)}
+                placeholder="Type animated title or caption..."
+                className="w-full px-2 py-1.5 rounded bg-cine-black border border-cine-border text-xs text-white placeholder-gray-500 focus:outline-none focus:border-purple-400"
+              />
+              <div className="flex items-center gap-1.5">
+                <select
+                  value={subStyle}
+                  onChange={(e) => setSubStyle(e.target.value as SubtitleCue["style"])}
+                  className="flex-1 p-1.5 rounded bg-cine-black border border-cine-border text-[11px] text-white"
+                >
+                  <option value="cinematic_gold_bottom">Cinematic Gold</option>
+                  <option value="bold_center_reel">Bold Center Reel</option>
+                  <option value="subtle_white">Subtle White</option>
+                </select>
+                <button
+                  onClick={() => {
+                    if (!subText.trim()) return;
+                    onAddSubtitle(subText.trim(), subStyle);
+                    setSubText("");
+                  }}
+                  disabled={!subText.trim()}
+                  className="px-2.5 py-1.5 rounded bg-purple-500/20 border border-purple-500/40 text-purple-300 hover:bg-purple-500/30 disabled:opacity-40 text-xs font-semibold flex items-center gap-1"
+                >
+                  <Plus className="w-3 h-3" /> Add
+                </button>
+              </div>
+            </div>
+
+            {subtitles.length > 0 && (
+              <div className="space-y-1 max-h-28 overflow-y-auto pr-1">
+                {subtitles.map((sub) => (
+                  <div
+                    key={sub.id}
+                    className="flex items-center justify-between gap-2 px-2 py-1 rounded bg-cine-black/60 border border-cine-border/50 text-[10px]"
+                  >
+                    <span className="text-gray-200 truncate">{sub.text}</span>
+                    {onDeleteSubtitle && (
+                      <button
+                        onClick={() => onDeleteSubtitle(sub.id)}
+                        className="text-gray-500 hover:text-red-400 shrink-0"
+                        title="Delete subtitle"
+                      >
+                        <Trash2 className="w-3 h-3" />
+                      </button>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         )}
       </div>

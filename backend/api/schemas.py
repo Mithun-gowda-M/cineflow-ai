@@ -30,7 +30,10 @@ ColorGradePreset = Literal[
     "moody_dark",
     "vintage_film",
     "high_contrast_bw",
+    "bleach_bypass",
 ]
+
+SpeedRampPreset = Literal["none", "fast_to_slow", "slow_to_fast", "ease_in_out"]
 
 MediaKind = Literal["video", "image", "audio"]
 ResolutionPreset = Literal["540p", "720p", "1080p", "4k"]
@@ -96,6 +99,17 @@ class MediaAnalysisResult(BaseModel):
     analyzed_at: str = Field(default_factory=utc_now_iso)
 
 
+class AudioAnalysisResult(BaseModel):
+    tempo_bpm: float = 0.0
+    duration_seconds: float = 0.0
+    beat_timestamps: list[float] = Field(default_factory=list)
+    downbeat_timestamps: list[float] = Field(default_factory=list)
+    energy_peaks: list[float] = Field(default_factory=list)
+    waveform_peaks: list[float] = Field(default_factory=list)
+    silence_ratio: float = Field(default=0.0, ge=0.0, le=1.0)
+    analyzed_at: str = Field(default_factory=utc_now_iso)
+
+
 class MediaAsset(BaseModel):
     id: str
     original_filename: str
@@ -111,6 +125,7 @@ class MediaAsset(BaseModel):
     metadata: MediaMetadata
     tags: list[str] = Field(default_factory=list)
     analysis: Optional[MediaAnalysisResult] = None
+    audio_analysis: Optional[AudioAnalysisResult] = None
     scenes: list[DetectedScene] = Field(default_factory=list)
     created_at: str
 
@@ -137,6 +152,7 @@ class MediaClip(BaseModel):
     timeline_start_seconds: float = Field(default=0.0, ge=0.0)
     duration_seconds: float = Field(default=4.0, gt=0.0, le=1800.0)
     playback_speed: float = Field(default=1.0, ge=0.25, le=4.0)
+    speed_ramp: SpeedRampPreset = "none"
     transition_in: Optional[TransitionSpec] = None
     transition_out: Optional[TransitionSpec] = None
     color_grade: Optional[ColorGradePreset] = None
@@ -177,6 +193,14 @@ class SubtitleCue(BaseModel):
         return self
 
 
+class CinematicEffects(BaseModel):
+    vignette: bool = False
+    film_grain: bool = False
+    ken_burns_on_images: bool = True
+    audio_ducking: bool = True
+    loudness_normalize: bool = True
+
+
 class TimelinePlan(BaseModel):
     version: str = "1.0"
     project_id: str = Field(min_length=1, max_length=128)
@@ -185,6 +209,7 @@ class TimelinePlan(BaseModel):
     target_duration_seconds: float = Field(default=30.0, gt=0.0, le=3600.0)
     fps: int = Field(default=30, ge=15, le=120)
     color_grade: ColorGradePreset = "natural"
+    cinematic_effects: CinematicEffects = Field(default_factory=CinematicEffects)
     video_clips: list[MediaClip] = Field(min_length=1)
     audio_tracks: list[AudioTrackCue] = Field(default_factory=list)
     subtitles: list[SubtitleCue] = Field(default_factory=list)
@@ -300,6 +325,7 @@ class DirectorPlanRequest(BaseModel):
     target_duration_seconds: Optional[float] = Field(default=None, gt=0.0, le=3600.0)
     aspect_ratio: Optional[AspectRatio] = None
     use_llm: bool = True
+    beat_sync: bool = True
 
 
 class DirectorPlanResponse(BaseModel):
@@ -316,4 +342,20 @@ class DirectorStatusResponse(BaseModel):
     configured_model: str
     available_models: list[str] = Field(default_factory=list)
     fallback_ready: bool = True
+
+
+# ---- Phase 5: Audio Beat-Sync Schemas ----
+
+
+class BeatSyncRequest(BaseModel):
+    timeline: TimelinePlan
+    audio_source_id: str = Field(min_length=1, max_length=128)
+    tolerance_seconds: float = Field(default=0.35, ge=0.05, le=1.5)
+
+
+class BeatSyncResponse(BaseModel):
+    timeline: TimelinePlan
+    tempo_bpm: float
+    snapped_cuts: int
+    beat_timestamps_used: list[float] = Field(default_factory=list)
 

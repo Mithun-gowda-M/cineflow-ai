@@ -10,6 +10,7 @@ from fastapi.staticfiles import StaticFiles
 
 from backend.api.config import get_settings
 from backend.api.database import get_database
+from backend.api.routes_audio import router as audio_router
 from backend.api.routes_director import router as director_router
 from backend.api.routes_media import router as media_router
 from backend.api.routes_projects import router as projects_router
@@ -55,6 +56,7 @@ def create_app() -> FastAPI:
 
     api_prefix = f"/api/{settings.API_VERSION}"
     app.include_router(media_router, prefix=api_prefix)
+    app.include_router(audio_router, prefix=api_prefix)
     app.include_router(projects_router, prefix=api_prefix)
     app.include_router(render_router, prefix=api_prefix)
     app.include_router(director_router, prefix=api_prefix)

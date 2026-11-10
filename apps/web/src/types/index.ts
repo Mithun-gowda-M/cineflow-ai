@@ -15,7 +15,22 @@ export type ColorGradePreset =
   | "golden_hour"
   | "moody_dark"
   | "vintage_film"
+  | "bleach_bypass"
   | "high_contrast_bw";
+
+export type SpeedRampPreset =
+  | "none"
+  | "fast_to_slow"
+  | "slow_to_fast"
+  | "ease_in_out";
+
+export interface CinematicEffects {
+  vignette: boolean;
+  filmGrain: boolean;
+  kenBurnsOnImages: boolean;
+  audioDucking: boolean;
+  loudnessNormalize: boolean;
+}
 
 export interface TimelineClip {
   id: string;
@@ -31,6 +46,7 @@ export interface TimelineClip {
   trimStart: number;
   trimEnd: number;
   speed: number;
+  speedRamp?: SpeedRampPreset;
   transition: TransitionType;
   colorGrade?: ColorGradePreset;
   qualityScore: number;
@@ -42,7 +58,7 @@ export interface SubtitleCue {
   startTime: number;
   duration: number;
   text: string;
-  style: "cinematic_gold_bottom" | "bold_center_reel";
+  style: "cinematic_gold_bottom" | "bold_center_reel" | "subtle_white";
 }
 
 export interface ProjectData {

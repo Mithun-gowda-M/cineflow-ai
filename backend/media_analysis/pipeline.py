@@ -9,11 +9,13 @@ from typing import Literal, Optional
 from backend.api.config import utc_now_iso
 from backend.api.database import get_database
 from backend.api.schemas import (
+    AudioAnalysisResult,
     DetectedScene,
     MediaAnalysisResult,
     MediaAsset,
     QualityBreakdown,
 )
+from backend.audio_engine.analyzer import analyze_audio_file
 from backend.media_analysis.cv_analyzer import analyze_image_file, analyze_video_segment
 from backend.media_analysis.deduplicator import (
     compute_media_dhash,
@@ -59,21 +61,40 @@ def analyze_media_asset(asset: MediaAsset, *, existing_assets: Optional[list[Med
     existing = existing_assets if existing_assets is not None else db.list_media_assets()
 
     if asset.media_kind == "audio":
+        audio_analysis: Optional[AudioAnalysisResult] = None
+        bpm_tags = ["Audio", "Soundtrack"]
+        try:
+            audio_analysis = analyze_audio_file(file_path)
+            if audio_analysis.tempo_bpm > 0:
+                bpm_tags.append(f"{round(audio_analysis.tempo_bpm)} BPM")
+        except Exception:
+            audio_analysis = None
+
         breakdown = QualityBreakdown(
             sharpness_score=100.0,
             exposure_score=100.0,
             stability_score=100.0,
             composition_score=100.0,
             overall_score=95.0,
-            explanation="Audio stream verified via FFprobe; ready for tempo & mix alignment.",
+            explanation=(
+                f"Audio analyzed via Librosa ({audio_analysis.tempo_bpm:.1f} BPM, "
+                f"{len(audio_analysis.beat_timestamps)} beats); ready for tempo & mix alignment."
+                if audio_analysis and audio_analysis.tempo_bpm > 0
+                else "Audio stream verified via FFprobe; ready for tempo & mix alignment."
+            ),
         )
         analysis = MediaAnalysisResult(
             quality=breakdown,
-            semantic_tags=["Audio", "Soundtrack"],
+            semantic_tags=bpm_tags,
             analyzed_at=utc_now_iso(),
         )
         updated = asset.model_copy(
-            update={"analysis": analysis, "tags": ["audio", "Soundtrack"], "scenes": []}
+            update={
+                "analysis": analysis,
+                "audio_analysis": audio_analysis,
+                "tags": ["audio", *(tag for tag in bpm_tags if tag.lower() != "audio")],
+                "scenes": [],
+            }
         )
         return db.save_media_asset(updated)
 

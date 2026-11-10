@@ -188,3 +188,4 @@ def parse_director_instruction(
         outro_style=outro_style,  # type: ignore[arg-type]
         title_suggestion=_detect_title(instruction, themes),
     )
+

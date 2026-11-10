@@ -11,6 +11,7 @@ from typing import Iterator, Optional
 
 from backend.api.config import get_settings, utc_now_iso
 from backend.api.schemas import (
+    AudioAnalysisResult,
     DetectedScene,
     MediaAnalysisResult,
     MediaAsset,
@@ -66,6 +67,7 @@ class Database:
                     metadata_json TEXT NOT NULL,
                     tags_json TEXT NOT NULL,
                     analysis_json TEXT,
+                    audio_analysis_json TEXT,
                     created_at TEXT NOT NULL
                 );
 
@@ -112,10 +114,12 @@ class Database:
                 );
                 """
             )
-            # Safe idempotent migration for pre-Phase 3 SQLite databases
+            # Safe idempotent migration for pre-Phase 3/5 SQLite databases
             cols = {r["name"] for r in conn.execute("PRAGMA table_info(media_assets)").fetchall()}
             if "analysis_json" not in cols:
                 conn.execute("ALTER TABLE media_assets ADD COLUMN analysis_json TEXT")
+            if "audio_analysis_json" not in cols:
+                conn.execute("ALTER TABLE media_assets ADD COLUMN audio_analysis_json TEXT")
 
     # ---- Media Assets ----
 
@@ -126,8 +130,8 @@ class Database:
                 INSERT INTO media_assets (
                     id, original_filename, stored_filename, media_kind, mime_type,
                     file_size_bytes, file_path, source_url, thumbnail_url,
-                    proxy_url, proxy_path, metadata_json, tags_json, analysis_json, created_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    proxy_url, proxy_path, metadata_json, tags_json, analysis_json, audio_analysis_json, created_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(id) DO UPDATE SET
                     original_filename = excluded.original_filename,
                     stored_filename = excluded.stored_filename,
@@ -141,7 +145,8 @@ class Database:
                     proxy_path = excluded.proxy_path,
                     metadata_json = excluded.metadata_json,
                     tags_json = excluded.tags_json,
-                    analysis_json = excluded.analysis_json
+                    analysis_json = excluded.analysis_json,
+                    audio_analysis_json = excluded.audio_analysis_json
                 """,
                 (
                     asset.id,
@@ -158,6 +163,7 @@ class Database:
                     asset.metadata.model_dump_json(),
                     json.dumps(asset.tags),
                     asset.analysis.model_dump_json() if asset.analysis else None,
+                    asset.audio_analysis.model_dump_json() if asset.audio_analysis else None,
                     asset.created_at,
                 ),
             )
@@ -222,8 +228,11 @@ class Database:
             return [self._row_to_scene(r) for r in rows]
 
     def _row_to_media(self, row: sqlite3.Row, scenes: Optional[list[DetectedScene]] = None) -> MediaAsset:
-        analysis_raw = row["analysis_json"] if "analysis_json" in row.keys() else None
+        keys = row.keys()
+        analysis_raw = row["analysis_json"] if "analysis_json" in keys else None
+        audio_raw = row["audio_analysis_json"] if "audio_analysis_json" in keys else None
         analysis = MediaAnalysisResult.model_validate_json(analysis_raw) if analysis_raw else None
+        audio_analysis = AudioAnalysisResult.model_validate_json(audio_raw) if audio_raw else None
         return MediaAsset(
             id=row["id"],
             original_filename=row["original_filename"],
@@ -239,6 +248,7 @@ class Database:
             metadata=MediaMetadata.model_validate_json(row["metadata_json"]),
             tags=json.loads(row["tags_json"]),
             analysis=analysis,
+            audio_analysis=audio_analysis,
             scenes=scenes if scenes is not None else [],
             created_at=row["created_at"],
         )

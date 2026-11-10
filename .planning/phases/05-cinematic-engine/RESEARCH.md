@@ -37,3 +37,4 @@ On Windows, FFmpeg filtergraph parsing treats `:` as an option separator and `\`
 
 - **Speed Ramps:** Clips support `"none"`, `"fast_to_slow"` (1.6x acceleration on opening 40% dropping to 0.65x slow-motion impact on closing 60%), `"slow_to_fast"` (0.75x build-up accelerating into 1.5x burst), and `"ease_in_out"`, implemented cleanly via split video/audio `trim` + `setpts`/`atempo` + `concat` inside the per-clip normalization branch.
 - **Bleach Bypass LUT:** Emulated via desaturated high-contrast luminance blend (`eq=contrast=1.32:saturation=0.45:brightness=-0.03`).
+

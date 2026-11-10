@@ -2,12 +2,13 @@
 
 import React, { useRef, useEffect } from "react";
 import { Play, Pause, SkipBack, SkipForward, Maximize2 } from "lucide-react";
-import { AspectRatio, ColorGradePreset, TimelineClip, SubtitleCue } from "@/types";
+import { AspectRatio, CinematicEffects, ColorGradePreset, TimelineClip, SubtitleCue } from "@/types";
 import { formatTimecode } from "@/lib/utils";
 
 interface VideoPreviewCanvasProps {
   aspectRatio: AspectRatio;
   colorGrade: ColorGradePreset;
+  cinematicEffects?: CinematicEffects;
   currentTime: number;
   totalDuration: number;
   isPlaying: boolean;
@@ -20,6 +21,7 @@ interface VideoPreviewCanvasProps {
 export const VideoPreviewCanvas: React.FC<VideoPreviewCanvasProps> = ({
   aspectRatio,
   colorGrade,
+  cinematicEffects,
   currentTime,
   totalDuration,
   isPlaying,
@@ -81,6 +83,7 @@ export const VideoPreviewCanvas: React.FC<VideoPreviewCanvasProps> = ({
     cinematic_teal_orange: "contrast(130%) saturate(125%) hue-rotate(15deg)",
     moody_dark: "contrast(125%) saturate(75%) brightness(85%)",
     vintage_film: "sepia(40%) contrast(110%) brightness(95%) grayscale(20%)",
+    bleach_bypass: "saturate(45%) contrast(155%) brightness(98%)",
     high_contrast_bw: "grayscale(100%) contrast(135%)",
   };
 
@@ -116,10 +119,47 @@ export const VideoPreviewCanvas: React.FC<VideoPreviewCanvasProps> = ({
         {/* Cinema Letterbox Gradient Overlay */}
         <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-black/30 pointer-events-none" />
 
+        {/* Optional Optical Vignette Overlay */}
+        {cinematicEffects?.vignette && (
+          <div
+            className="absolute inset-0 pointer-events-none"
+            style={{
+              background:
+                "radial-gradient(circle, rgba(0,0,0,0) 48%, rgba(0,0,0,0.72) 100%)",
+            }}
+          />
+        )}
+
+        {/* Optional 35mm Film Grain Preview Overlay */}
+        {cinematicEffects?.filmGrain && (
+          <div
+            className="absolute inset-0 pointer-events-none opacity-20 mix-blend-overlay"
+            style={{
+              backgroundImage:
+                "radial-gradient(rgba(255,255,255,0.45) 0.5px, transparent 0.5px)",
+              backgroundSize: "3px 3px",
+            }}
+          />
+        )}
+
         {/* Active Subtitle Cue */}
         {activeSubtitle && (
-          <div className="absolute bottom-12 inset-x-4 text-center animate-in fade-in zoom-in-95 duration-200 pointer-events-none">
-            <span className="inline-block px-4 py-1.5 rounded-lg bg-black/80 backdrop-blur-md text-cine-gold-300 font-semibold text-sm sm:text-base border border-cine-gold-500/30 shadow-lg tracking-wide">
+          <div
+            className={`absolute inset-x-4 text-center animate-in fade-in zoom-in-95 duration-200 pointer-events-none ${
+              activeSubtitle.style === "bold_center_reel"
+                ? "top-1/2 -translate-y-1/2"
+                : "bottom-12"
+            }`}
+          >
+            <span
+              className={`inline-block px-4 py-1.5 rounded-lg backdrop-blur-md shadow-lg tracking-wide ${
+                activeSubtitle.style === "bold_center_reel"
+                  ? "bg-cine-black/85 text-white font-extrabold text-base sm:text-xl border-2 border-cine-gold-400 uppercase"
+                  : activeSubtitle.style === "subtle_white"
+                  ? "bg-black/70 text-gray-100 font-medium text-sm border border-white/15"
+                  : "bg-black/80 text-cine-gold-300 font-semibold text-sm sm:text-base border border-cine-gold-500/30"
+              }`}
+            >
               {activeSubtitle.text}
             </span>
           </div>

@@ -14,8 +14,13 @@ from backend.video_engine.ffmpeg_runner import (
     FFmpegExecutionError,
     run_ffmpeg_with_progress,
 )
-from backend.video_engine.filtergraph import ResolvedVideoSource, build_render_command
+from backend.video_engine.filtergraph import (
+    ResolvedVideoSource,
+    build_render_command,
+    resolve_canvas_dimensions,
+)
 from backend.video_engine.hardware import detect_hardware_profile
+from backend.video_engine.typography import generate_ass_file
 
 
 class RenderSourceError(ValueError):
@@ -76,47 +81,59 @@ async def execute_render_job(
 
     encoder, preset, quality = _choose_encoder(request.encoder_preference)
 
-    on_progress(12.0, f"Building FFmpeg complex filtergraph ({encoder})...")
-    cmd_args, expected_duration = build_render_command(
-        timeline=request.timeline,
-        resolved_clips=resolved_clips,
-        resolved_audio=resolved_audio,
-        output_path=str(output_path),
-        resolution=request.resolution,
-        encoder=encoder,
-        preset=preset,
-        quality=quality,
-    )
+    subtitle_ass_path: Optional[Path] = None
+    if request.timeline.subtitles:
+        width, height = resolve_canvas_dimensions(request.timeline.aspect_ratio, request.resolution)
+        subtitle_ass_path = settings.CACHE_DIR / f"{job_id}.ass"
+        generate_ass_file(request.timeline.subtitles, width, height, subtitle_ass_path)
 
+    on_progress(12.0, f"Building FFmpeg complex filtergraph ({encoder})...")
     try:
-        await run_ffmpeg_with_progress(
-            args=cmd_args,
-            total_duration_seconds=expected_duration,
-            on_progress=on_progress,
-            process_holder=process_holder,
+        cmd_args, expected_duration = build_render_command(
+            timeline=request.timeline,
+            resolved_clips=resolved_clips,
+            resolved_audio=resolved_audio,
+            output_path=str(output_path),
+            resolution=request.resolution,
+            encoder=encoder,
+            preset=preset,
+            quality=quality,
+            subtitle_ass_path=subtitle_ass_path,
         )
-    except FFmpegExecutionError:
-        # Automatic safe CPU fallback if hardware encoder rejected a filter or stream format
-        if encoder != "libx264":
-            on_progress(15.0, f"Hardware encoder '{encoder}' unavailable for stream; falling back to CPU libx264...")
-            fallback_args, expected_duration = build_render_command(
-                timeline=request.timeline,
-                resolved_clips=resolved_clips,
-                resolved_audio=resolved_audio,
-                output_path=str(output_path),
-                resolution=request.resolution,
-                encoder="libx264",
-                preset="fast",
-                quality=21,
-            )
+
+        try:
             await run_ffmpeg_with_progress(
-                args=fallback_args,
+                args=cmd_args,
                 total_duration_seconds=expected_duration,
                 on_progress=on_progress,
                 process_holder=process_holder,
             )
-        else:
-            raise
+        except FFmpegExecutionError:
+            # Automatic safe CPU fallback if hardware encoder rejected a filter or stream format
+            if encoder != "libx264":
+                on_progress(15.0, f"Hardware encoder '{encoder}' unavailable for stream; falling back to CPU libx264...")
+                fallback_args, expected_duration = build_render_command(
+                    timeline=request.timeline,
+                    resolved_clips=resolved_clips,
+                    resolved_audio=resolved_audio,
+                    output_path=str(output_path),
+                    resolution=request.resolution,
+                    encoder="libx264",
+                    preset="fast",
+                    quality=21,
+                    subtitle_ass_path=subtitle_ass_path,
+                )
+                await run_ffmpeg_with_progress(
+                    args=fallback_args,
+                    total_duration_seconds=expected_duration,
+                    on_progress=on_progress,
+                    process_holder=process_holder,
+                )
+            else:
+                raise
+    finally:
+        if subtitle_ass_path is not None:
+            subtitle_ass_path.unlink(missing_ok=True)
 
     if not output_path.is_file() or output_path.stat().st_size == 0:
         raise RuntimeError("Render completed without producing a valid non-empty MP4 output.")

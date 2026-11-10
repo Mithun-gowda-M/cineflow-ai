@@ -39,3 +39,4 @@ async def create_director_plan(request: DirectorPlanRequest) -> DirectorPlanResp
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+

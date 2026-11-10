@@ -1,7 +1,7 @@
 # PROJECT STATE: CINEFLOW AI
 
-> **Current Phase:** Phase 4 (AI Director & Storyboard Generator) — COMPLETED  
-> **Next Phase:** Phase 5 (Advanced Cinematic Engine & Audio Intelligence) — PLANNED  
+> **Current Phase:** Phase 5 (Advanced Cinematic Engine & Audio Intelligence) — COMPLETED  
+> **Next Phase:** Phase 6 (Voice & Conversational Editing) — READY TO PLAN  
 > **Last Updated:** 2026-11-10
 
 ---
@@ -15,8 +15,8 @@
 | **Phase 2** | Real Video Processing & Rendering Engine | **COMPLETED** | 2026-11-10 |
 | **Phase 3** | AI Media Intelligence & Scene Detection | **COMPLETED** | 2026-11-10 |
 | **Phase 4** | AI Director & Storyboard Generator | **COMPLETED** | 2026-11-10 |
-| **Phase 5** | Advanced Cinematic Engine & Audio Intelligence | **PLANNED & READY FOR EXECUTION** | 2026-11-10 |
-| **Phase 6** | Voice & Conversational Editing | Queued | — |
+| **Phase 5** | Advanced Cinematic Engine & Audio Intelligence | **COMPLETED** | 2026-11-10 |
+| **Phase 6** | Voice & Conversational Editing | **READY TO PLAN** | — |
 | **Phase 7** | Trend Intelligence (Optional Style Recipes) | Queued | — |
 | **Phase 8** | Institutional Campus Deployment & Security | Queued | — |
 | **Phase 9** | Hackathon Presentation & Demonstration Package | Queued | — |
@@ -41,12 +41,12 @@
 - **Version Control:** Git 2.56.0.windows.2 (`main` branch initialized)
 - **Package Managers Available:** Winget, Chocolatey, npm
 - **FFmpeg Status:** Verified `Gyan.FFmpeg 9.0.2` (`ffmpeg.exe` & `ffprobe.exe`), 16 CPU cores, encoders `h264_qsv` and `libx264`.
-- **CV Engine:** Verified `opencv-python-headless 5.0.0` + `scenedetect 0.7.3` + `numpy 2.5.4` inside `backend/.venv`.
+- **CV & Audio Engines:** Verified `opencv-python-headless 5.0.0`, `scenedetect 0.7.3`, `numpy 2.5.4`, `librosa 1.0.0`, `soundfile 0.14.0` inside `backend/.venv`.
 
 ---
 
-## 4. Immediate Next Actions (Phase 5)
-1. Plan Phase 5 (`/gsd-plan-phase 5`) for Librosa audio beat detection, tempo sync cutting, speed ramps, animated typography (`drawtext`/ASS subtitles), and audio ducking/loudness normalization.
-2. Integrate Librosa (`librosa`, `soundfile`) into `backend/audio_engine/`.
-3. Wire beat-grid visualization and animated subtitle rendering into the Next.js timeline & FFmpeg export pipeline.
+## 4. Immediate Next Actions (Phase 6)
+1. Plan Phase 6 (`/gsd-plan-phase 6`) for local speech-to-text (`faster-whisper` / `whisper.cpp`) transcription, conversational editing commands, and frontend microphone command capture.
+2. Connect voice-driven timeline editing commands directly into the AI Director & Clip Inspector pipeline.
+3. Verify offline voice transcription and conversational edit execution with automated pytest + Next.js build checks.
 

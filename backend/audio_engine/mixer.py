@@ -1,4 +1,4 @@
-"""FFmpeg audio filter builders for tempo scaling, normalization, and music mixing."""
+"""FFmpeg audio filter builders for tempo scaling, sidechain ducking, and loudness normalization."""
 
 from __future__ import annotations
 
@@ -36,13 +36,21 @@ def build_music_mix_filters(
     music_inputs: list[tuple[int, ResolvedAudioSource]],
     total_video_duration: float,
     output_label: str = "a_final",
+    *,
+    has_foreground_audio: bool = False,
+    allow_ducking: bool = True,
+    allow_loudnorm: bool = True,
 ) -> list[str]:
-    """Generate filtergraph stages to trim, delay, duck, and mix background music with video audio."""
+    """Generate filtergraph stages for sidechain ducking, mixing, and EBU R128 loudness normalization."""
+    post_filter = ",loudnorm=I=-16:TP=-1.5:LRA=11,alimiter=limit=0.95" if allow_loudnorm else ",alimiter=limit=0.95"
     if not music_inputs:
-        return [f"[{base_audio_label}]alimiter=limit=0.95[{output_label}]"]
+        if allow_loudnorm:
+            return [f"[{base_audio_label}]loudnorm=I=-16:TP=-1.5:LRA=11,alimiter=limit=0.95[{output_label}]"]
+        return [f"[{base_audio_label}]anull[{output_label}]"]
 
     filters: list[str] = []
-    mix_labels: list[str] = [f"[{base_audio_label}]"]
+    music_labels: list[str] = []
+    ducking_requested = False
 
     for idx, (input_index, resolved) in enumerate(music_inputs):
         cue = resolved.cue
@@ -50,15 +58,16 @@ def build_music_mix_filters(
         if max_play_dur <= 0.2:
             continue
 
-        effective_vol = cue.duck_volume if cue.ducking_enabled else cue.volume
-        # Respect explicit user volume cap while gently dipping under foreground video audio when ducking is on
-        target_vol = round(min(cue.volume, effective_vol) if cue.ducking_enabled else cue.volume, 3)
+        if cue.ducking_enabled:
+            ducking_requested = True
 
+        # Static gentle trim when foreground audio exists without sidechain, or baseline user volume
+        base_vol = cue.volume if has_foreground_audio else cue.volume
         chain = [
             "aformat=sample_fmts=fltp:sample_rates=48000:channel_layouts=stereo",
             f"atrim=duration={max_play_dur:.3f}",
             "asetpts=PTS-STARTPTS",
-            f"volume={target_vol}",
+            f"volume={round(base_vol, 3)}",
         ]
         if max_play_dur > 1.5:
             fade_start = round(max_play_dur - 1.0, 3)
@@ -69,15 +78,36 @@ def build_music_mix_filters(
 
         label = f"a_music_{idx}"
         filters.append(f"[{input_index}:a]{','.join(chain)}[{label}]")
-        mix_labels.append(f"[{label}]")
+        music_labels.append(label)
 
-    if len(mix_labels) == 1:
-        filters.append(f"[{base_audio_label}]alimiter=limit=0.95[{output_label}]")
+    if not music_labels:
+        if allow_loudnorm:
+            return [f"[{base_audio_label}]loudnorm=I=-16:TP=-1.5:LRA=11,alimiter=limit=0.95[{output_label}]"]
+        return [f"[{base_audio_label}]anull[{output_label}]"]
+
+    # Combine multiple music cues if present
+    if len(music_labels) == 1:
+        combined_music = music_labels[0]
+    else:
+        combined_music = "a_music_bus"
+        filters.append(
+            f"{''.join(f'[{m}]' for m in music_labels)}amix=inputs={len(music_labels)}:duration=longest:normalize=0[{combined_music}]"
+        )
+
+    if has_foreground_audio and ducking_requested and allow_ducking:
+        # True sidechain audio ducking: music automatically compresses smoothly under active speech/foreground
+        filters.append(f"[{base_audio_label}]asplit=2[fg_mix][fg_sc]")
+        filters.append(
+            f"[{combined_music}][fg_sc]sidechaincompress=threshold=0.02:ratio=4.5:attack=120:release=500[a_music_ducked]"
+        )
+        filters.append(
+            f"[fg_mix][a_music_ducked]amix=inputs=2:duration=first:dropout_transition=2:normalize=0"
+            f"{post_filter}[{output_label}]"
+        )
         return filters
 
     filters.append(
-        f"{''.join(mix_labels)}amix=inputs={len(mix_labels)}:duration=first:dropout_transition=2:normalize=0,"
-        f"alimiter=limit=0.95[{output_label}]"
+        f"[{base_audio_label}][{combined_music}]amix=inputs=2:duration=first:dropout_transition=2:normalize=0"
+        f"{post_filter}[{output_label}]"
     )
     return filters
-

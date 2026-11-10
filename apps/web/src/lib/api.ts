@@ -8,9 +8,11 @@ import type {
 } from "@/types";
 
 export const API_BASE_URL =
-  process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api/v1";
+  process.env.NEXT_PUBLIC_API_URL || "/api/v1";
 
-export const BACKEND_ORIGIN = API_BASE_URL.replace(/\/api\/v1\/?$/, "");
+export const BACKEND_ORIGIN = API_BASE_URL.startsWith("http")
+  ? API_BASE_URL.replace(/\/api\/v1\/?$/, "")
+  : "";
 
 export function resolveBackendUrl(path?: string | null): string {
   if (!path) return "";

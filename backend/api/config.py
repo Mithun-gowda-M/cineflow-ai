@@ -37,6 +37,7 @@ class Settings(BaseSettings):
     BACKEND_PORT: int = 8000
     SECRET_KEY: str = "dev-local-cineflow-secret-key-change-in-production"
     ALLOWED_ORIGINS: str = "http://localhost:3000,http://127.0.0.1:3000"
+    ALLOWED_ORIGIN_REGEX: str = r"^https://[a-z0-9-]+\.trycloudflare\.com$"
 
     HARDWARE_PROFILE: Literal["auto", "low", "medium", "high"] = "auto"
     MAX_CONCURRENT_RENDERS: int = 2

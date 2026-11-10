@@ -1,7 +1,7 @@
 # PROJECT STATE: CINEFLOW AI
 
 > **Current Phase:** Phase 7 (Trend Intelligence — Optional Style Recipes) — COMPLETED  
-> **Next Phase:** Phase 8 (Institutional Campus Deployment & Security) — READY TO PLAN  
+> **Next Phase:** Phase 8 (Institutional Campus Deployment & Security) — PLANNED & READY FOR EXECUTION  
 > **Last Updated:** 2026-11-10
 
 ---
@@ -18,7 +18,7 @@
 | **Phase 5** | Advanced Cinematic Engine & Audio Intelligence | **COMPLETED** | 2026-11-10 |
 | **Phase 6** | Voice & Conversational Editing | **COMPLETED** | 2026-11-10 |
 | **Phase 7** | Trend Intelligence (Optional Style Recipes) | **COMPLETED** | 2026-11-10 |
-| **Phase 8** | Institutional Campus Deployment & Security | **READY TO PLAN** | — |
+| **Phase 8** | Institutional Campus Deployment & Security | **PLANNED & READY FOR EXECUTION** | 2026-11-10 |
 | **Phase 9** | Hackathon Presentation & Demonstration Package | Queued | — |
 
 ---
@@ -46,6 +46,6 @@
 ---
 
 ## 4. Immediate Next Actions (Phase 8)
-1. Plan Phase 8 (`/gsd-plan-phase 8`) for student JWT authentication + RBAC (student vs club admin), storage quota enforcement & automated cache cleanup, Institutional Admin Dashboard metrics, PostgreSQL migration readiness, and BMSIT technical club handover docs.
-2. Verify all campus auth, quota, cleanup, and build gates cleanly.
+1. Execute Phase 8 (`/gsd-execute-phase 8`) to implement student JWT auth & RBAC, storage quota enforcement, automated cache cleanup, live Admin Diagnostics UI/APIs, SQLite -> PostgreSQL migration scripts, and BMSIT technical club handover documentation.
+2. Verify all auth/RBAC/quota/cleanup/migration tests alongside the Next.js production build cleanly.
 

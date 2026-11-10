@@ -25,6 +25,10 @@ dist/
 *.cert
 
 # Media Processing, Temp and Renders
+data/
+*.db
+*.db-wal
+*.db-shm
 temp/
 renders/
 uploads/

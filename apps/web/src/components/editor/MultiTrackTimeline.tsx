@@ -302,3 +302,4 @@ export const MultiTrackTimeline: React.FC<MultiTrackTimelineProps> = ({
     </div>
   );
 };
+

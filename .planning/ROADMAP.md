@@ -1,8 +1,8 @@
 # ROADMAP: CINEFLOW AI
 
 > **Strategy:** Phased Delivery from Verified Foundation to Institutional Deployment  
-> **Current Phase:** Phase 0 (Research & Architecture) Completed  
-> **Next Immediate Phase:** Phase 1 (Premium Frontend Design System & Workspaces)
+> **Current Phase:** Phase 2 (Real Video Processing & Rendering Engine) Completed  
+> **Next Immediate Phase:** Phase 3 (AI Media Intelligence & Scene Detection)
 
 ---
 
@@ -29,33 +29,33 @@ Foundations  Premium UI   Rendering   CV Intel    AI Director Cinematic   Voice/
 
 ---
 
-### 🟡 Phase 1 — Premium Frontend Design System & Workspaces
-- [ ] Initialize Next.js 15 app in `apps/web` with TypeScript, Tailwind CSS, Lucide icons, Framer Motion.
-- [ ] Establish CINEFLOW dark cinematic design tokens (Midnight `#0B0D13`, Obsidian `#11141E`, Champagne Gold `#E5B869`, Cyan `#38BDF8`).
-- [ ] Build high-converting Cinematic Landing Page ("Your Footage Deserves a Director") with hero teaser and interactive workflow simulation.
-- [ ] Build Student Project Dashboard (project creation, storage quota gauge, recent projects list).
-- [ ] Build Media Ingestion Workspace (drag-and-drop batch dropzone, metadata cards, asset pool).
-- [ ] Build Professional Multi-Track Video Editor Workspace:
+### 🟢 Phase 1 — Premium Frontend Design System & Workspaces
+- [x] Initialize Next.js 15 app in `apps/web` with TypeScript, Tailwind CSS, Lucide icons, Framer Motion.
+- [x] Establish CINEFLOW dark cinematic design tokens (Midnight `#0B0D13`, Obsidian `#11141E`, Champagne Gold `#E5B869`, Cyan `#38BDF8`).
+- [x] Build high-converting Cinematic Landing Page ("Your Footage Deserves a Director") with hero teaser and interactive workflow simulation.
+- [x] Build Student Project Dashboard (project creation, storage quota gauge, recent projects list).
+- [x] Build Media Ingestion Workspace (drag-and-drop batch dropzone, metadata cards, asset pool).
+- [x] Build Professional Multi-Track Video Editor Workspace:
   - Video Preview Canvas with custom playback controls and timecode readout.
   - Multi-track timeline (Video V1/V2, Audio A1/A2, Subtitles T1).
   - Zoomable timeline ruler and scrubbable playhead.
   - Right-side AI Director drawer with prompt interface and clip inspector.
-- [ ] Build Export Modal (aspect ratios: 16:9, 9:16, 1:1, 21:9, resolution selectors).
+- [x] Build Export Modal (aspect ratios: 16:9, 9:16, 1:1, 21:9, resolution selectors).
 
 ---
 
-### 🟡 Phase 2 — Real Video Processing & Rendering Engine
-- [ ] Configure and verify FFmpeg / FFprobe integration (with static bundling/PATH detection).
-- [ ] Implement backend media upload endpoint in FastAPI with file validation and secure naming.
-- [ ] Implement FFprobe metadata extractor (codec, resolution, duration, bitrate, audio channels).
-- [ ] Implement automated 720p proxy generator for instant browser scrubbing.
-- [ ] Build native FFmpeg filtergraph rendering pipeline:
+### 🟢 Phase 2 — Real Video Processing & Rendering Engine
+- [x] Configure and verify FFmpeg / FFprobe integration (with static bundling/PATH detection).
+- [x] Implement backend media upload endpoint in FastAPI with file validation and secure naming.
+- [x] Implement FFprobe metadata extractor (codec, resolution, duration, bitrate, audio channels).
+- [x] Implement automated 720p proxy generator for instant browser scrubbing.
+- [x] Build native FFmpeg filtergraph rendering pipeline:
   - Precise timestamp-based clip trimming.
   - Aspect ratio conforming (pad, crop, blur-fill).
   - Seamless concatenations with crossfade transitions (`xfade`).
   - Audio mixing and background music ducking (`amix`, `volume`).
-- [ ] Implement export job runner with progress tracking and real MP4 export download endpoint.
-- [ ] Create automated rendering integration test suite.
+- [x] Implement export job runner with progress tracking and real MP4 export download endpoint.
+- [x] Create automated rendering integration test suite.
 
 ---
 

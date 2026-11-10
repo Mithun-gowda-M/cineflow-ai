@@ -1,11 +1,17 @@
 "use client";
 
-import React, { useState } from "react";
-import { 
-  Film, Sparkles, Image as ImageIcon, Music, Plus, 
-  Search, Check, Scan, ChevronLeft, ChevronRight 
+import React, { useState, useEffect } from "react";
+import {
+  Film,
+  Plus,
+  Search,
+  Scan,
+  ChevronLeft,
+  ChevronRight,
+  RefreshCw,
 } from "lucide-react";
 import { TimelineClip } from "@/types";
+import { listMediaAssets, resolveBackendUrl } from "@/lib/api";
 
 interface MediaLibraryDrawerProps {
   onAddClip: (clip: Partial<TimelineClip>) => void;
@@ -13,76 +19,108 @@ interface MediaLibraryDrawerProps {
   onToggleCollapse: () => void;
 }
 
+interface LibraryEntry {
+  id: string;
+  sourceId?: string;
+  mediaKind: "video" | "image" | "audio";
+  title: string;
+  type: "footage" | "broll" | "audio";
+  duration: number;
+  qualityScore: number;
+  thumbnail: string;
+  sourceUrl: string;
+  proxyUrl?: string;
+  tags: string[];
+  isReal?: boolean;
+}
+
+const DEMO_LIBRARY: LibraryEntry[] = [
+  {
+    id: "media_diya_01",
+    mediaKind: "image",
+    title: "Diya Lighting Hook (Demo)",
+    type: "footage",
+    duration: 4.5,
+    qualityScore: 94,
+    thumbnail: "https://images.unsplash.com/photo-1514565131-fce0801e5785?auto=format&fit=crop&w=400&q=80",
+    sourceUrl: "https://images.unsplash.com/photo-1514565131-fce0801e5785?auto=format&fit=crop&w=1200&q=80",
+    tags: ["Diya", "Macro", "Warm"],
+  },
+  {
+    id: "media_fireworks_02",
+    mediaKind: "image",
+    title: "Fireworks Climax Burst (Demo)",
+    type: "footage",
+    duration: 3.8,
+    qualityScore: 91,
+    thumbnail: "https://images.unsplash.com/photo-1498931299472-f7a63a5a1cfa?auto=format&fit=crop&w=400&q=80",
+    sourceUrl: "https://images.unsplash.com/photo-1498931299472-f7a63a5a1cfa?auto=format&fit=crop&w=1200&q=80",
+    tags: ["Fireworks", "Night", "Action"],
+  },
+  {
+    id: "media_rangoli_broll",
+    mediaKind: "image",
+    title: "Geometric Rangoli (Demo)",
+    type: "broll",
+    duration: 3.0,
+    qualityScore: 95,
+    thumbnail: "https://images.unsplash.com/photo-1605647540924-852290f6b0d5?auto=format&fit=crop&w=400&q=80",
+    sourceUrl: "https://images.unsplash.com/photo-1605647540924-852290f6b0d5?auto=format&fit=crop&w=1200&q=80",
+    tags: ["Photo", "Detail", "Art"],
+  },
+];
+
 export const MediaLibraryDrawer: React.FC<MediaLibraryDrawerProps> = ({
   onAddClip,
   isCollapsed,
   onToggleCollapse,
 }) => {
-  const [activeTab, setActiveTab] = useState<"footage" | "scenes" | "broll" | "audio">("footage");
+  const [activeTab, setActiveTab] = useState<"footage" | "broll" | "audio">("footage");
   const [searchQuery, setSearchQuery] = useState("");
+  const [realAssets, setRealAssets] = useState<LibraryEntry[]>([]);
+  const [loading, setLoading] = useState(false);
 
-  const sampleLibrary = [
-    {
-      id: "media_diya_01",
-      title: "Diya Lighting Hook",
-      type: "footage",
-      duration: 4.5,
-      qualityScore: 94,
-      thumbnail: "https://images.unsplash.com/photo-1514565131-fce0801e5785?auto=format&fit=crop&w=400&q=80",
-      tags: ["Diya", "Macro", "Warm"],
-    },
-    {
-      id: "media_fireworks_02",
-      title: "Fireworks Climax Burst",
-      type: "footage",
-      duration: 3.8,
-      qualityScore: 91,
-      thumbnail: "https://images.unsplash.com/photo-1498931299472-f7a63a5a1cfa?auto=format&fit=crop&w=400&q=80",
-      tags: ["Fireworks", "Night", "Action"],
-    },
-    {
-      id: "media_crowd_03",
-      title: "Auditorium Cheer Slowmo",
-      type: "footage",
-      duration: 5.2,
-      qualityScore: 86,
-      thumbnail: "https://images.unsplash.com/photo-1516450360452-9312f5e86fc7?auto=format&fit=crop&w=400&q=80",
-      tags: ["Crowd", "Fest", "Energy"],
-    },
-    {
-      id: "media_sunset_04",
-      title: "Sunset Drone Establishing",
-      type: "footage",
-      duration: 6.0,
-      qualityScore: 98,
-      thumbnail: "https://images.unsplash.com/photo-1507525428034-b723cf961d3e?auto=format&fit=crop&w=400&q=80",
-      tags: ["Sunset", "Landscape", "Drone"],
-    },
-    {
-      id: "media_rangoli_broll",
-      title: "Geometric Rangoli Close-up",
-      type: "broll",
-      duration: 3.0,
-      qualityScore: 95,
-      thumbnail: "https://images.unsplash.com/photo-1605647540924-852290f6b0d5?auto=format&fit=crop&w=400&q=80",
-      tags: ["Photo", "Detail", "Art"],
-    },
-    {
-      id: "audio_festive_beat",
-      title: "Festival Cinematic Instrumental",
-      type: "audio",
-      duration: 120.0,
-      qualityScore: 99,
-      thumbnail: "https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?auto=format&fit=crop&w=400&q=80",
-      tags: ["124 BPM", "Electronic", "Drop"],
-    },
-  ];
+  const loadAssets = async () => {
+    setLoading(true);
+    try {
+      const assets = await listMediaAssets();
+      const mapped: LibraryEntry[] = assets.map((a) => ({
+        id: a.id,
+        sourceId: a.id,
+        mediaKind: a.media_kind,
+        title: a.original_filename,
+        type: a.media_kind === "audio" ? "audio" : a.media_kind === "image" ? "broll" : "footage",
+        duration: a.media_kind === "image" ? 4.0 : Math.max(0.5, Number(a.metadata.duration_seconds.toFixed(1))),
+        qualityScore: 92,
+        thumbnail:
+          resolveBackendUrl(a.thumbnail_url) ||
+          "https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?auto=format&fit=crop&w=400&q=80",
+        sourceUrl: resolveBackendUrl(a.source_url),
+        proxyUrl: resolveBackendUrl(a.proxy_url),
+        tags: a.tags,
+        isReal: true,
+      }));
+      setRealAssets(mapped);
+    } catch {
+      // Backend offline — demo assets remain available
+    } finally {
+      setLoading(false);
+    }
+  };
 
-  const filtered = sampleLibrary.filter((item) => {
-    const matchesTab = 
-      activeTab === "footage" ? item.type === "footage" :
-      activeTab === "broll" ? item.type === "broll" :
-      activeTab === "audio" ? item.type === "audio" : true;
+  useEffect(() => {
+    loadAssets();
+  }, []);
+
+  const combinedLibrary = [...realAssets, ...DEMO_LIBRARY];
+
+  const filtered = combinedLibrary.filter((item) => {
+    const matchesTab =
+      activeTab === "footage"
+        ? item.type === "footage"
+        : activeTab === "broll"
+        ? item.type === "broll"
+        : item.type === "audio";
     const matchesSearch = item.title.toLowerCase().includes(searchQuery.toLowerCase());
     return matchesTab && matchesSearch;
   });
@@ -108,13 +146,22 @@ export const MediaLibraryDrawer: React.FC<MediaLibraryDrawerProps> = ({
         <span className="text-xs font-bold uppercase tracking-wider text-white flex items-center gap-1.5">
           <Film className="w-3.5 h-3.5 text-cine-gold-400" /> Media Library
         </span>
-        <button
-          onClick={onToggleCollapse}
-          className="p-1 rounded text-gray-400 hover:text-white hover:bg-white/5 transition-colors"
-          title="Collapse Panel"
-        >
-          <ChevronLeft className="w-4 h-4" />
-        </button>
+        <div className="flex items-center gap-1">
+          <button
+            onClick={loadAssets}
+            className="p-1 rounded text-gray-400 hover:text-cine-gold-400 hover:bg-white/5 transition-colors"
+            title="Refresh Uploaded Media"
+          >
+            <RefreshCw className={`w-3.5 h-3.5 ${loading ? "animate-spin" : ""}`} />
+          </button>
+          <button
+            onClick={onToggleCollapse}
+            className="p-1 rounded text-gray-400 hover:text-white hover:bg-white/5 transition-colors"
+            title="Collapse Panel"
+          >
+            <ChevronLeft className="w-4 h-4" />
+          </button>
+        </div>
       </div>
 
       {/* Tabs */}
@@ -127,7 +174,7 @@ export const MediaLibraryDrawer: React.FC<MediaLibraryDrawerProps> = ({
               : "text-gray-400 hover:text-white"
           }`}
         >
-          Clips ({sampleLibrary.filter(x => x.type === "footage").length})
+          Clips ({combinedLibrary.filter((x) => x.type === "footage").length})
         </button>
         <button
           onClick={() => setActiveTab("broll")}
@@ -137,7 +184,7 @@ export const MediaLibraryDrawer: React.FC<MediaLibraryDrawerProps> = ({
               : "text-gray-400 hover:text-white"
           }`}
         >
-          B-Roll
+          Images
         </button>
         <button
           onClick={() => setActiveTab("audio")}
@@ -172,10 +219,15 @@ export const MediaLibraryDrawer: React.FC<MediaLibraryDrawerProps> = ({
             key={item.id}
             onClick={() => {
               onAddClip({
+                sourceId: item.sourceId,
+                mediaKind: item.mediaKind,
                 title: item.title,
-                sourceUrl: item.thumbnail,
+                sourceUrl: item.sourceUrl,
+                proxyUrl: item.proxyUrl,
                 thumbnailUrl: item.thumbnail,
                 duration: item.duration,
+                trimStart: 0.0,
+                trimEnd: item.duration,
                 qualityScore: item.qualityScore,
                 tags: item.tags,
                 trackId: item.type === "audio" ? "a2" : "v1",
@@ -183,7 +235,6 @@ export const MediaLibraryDrawer: React.FC<MediaLibraryDrawerProps> = ({
             }}
             className="group p-1.5 rounded-lg bg-cine-card border border-cine-border hover:border-cine-gold-500/60 hover:bg-cine-panel transition-all cursor-pointer flex gap-2"
           >
-            {/* Thumbnail */}
             <div className="relative w-16 h-12 rounded overflow-hidden bg-black shrink-0">
               <div
                 className="w-full h-full bg-cover bg-center group-hover:scale-105 transition-transform"
@@ -194,11 +245,17 @@ export const MediaLibraryDrawer: React.FC<MediaLibraryDrawerProps> = ({
               </span>
             </div>
 
-            {/* Info */}
             <div className="flex-1 min-w-0 flex flex-col justify-between">
-              <h5 className="text-xs font-semibold text-white truncate group-hover:text-cine-gold-300">
-                {item.title}
-              </h5>
+              <div className="flex items-center gap-1">
+                <h5 className="text-xs font-semibold text-white truncate group-hover:text-cine-gold-300 flex-1">
+                  {item.title}
+                </h5>
+                {item.isReal && (
+                  <span className="text-[9px] px-1 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                    Local
+                  </span>
+                )}
+              </div>
               <div className="flex items-center justify-between text-[10px] text-gray-400">
                 <span className="text-cine-gold-400 flex items-center gap-0.5">
                   <Scan className="w-2.5 h-2.5" /> {item.qualityScore}%

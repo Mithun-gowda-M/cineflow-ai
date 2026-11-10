@@ -227,14 +227,17 @@ export default function EditorStudioPage() {
 
     const newClip: TimelineClip = {
       id: `clip_${Date.now()}`,
+      sourceId: newClipPartial.sourceId,
+      mediaKind: newClipPartial.mediaKind,
       title: newClipPartial.title || "New Media Clip",
       sourceUrl: newClipPartial.sourceUrl || "https://images.unsplash.com/photo-1514565131-fce0801e5785?auto=format&fit=crop&w=800&q=80",
+      proxyUrl: newClipPartial.proxyUrl,
       thumbnailUrl: newClipPartial.thumbnailUrl || "https://images.unsplash.com/photo-1514565131-fce0801e5785?auto=format&fit=crop&w=400&q=80",
       trackId: targetTrack,
       startTime: newStartTime,
       duration: clipDur,
-      trimStart: 0.0,
-      trimEnd: clipDur,
+      trimStart: newClipPartial.trimStart ?? 0.0,
+      trimEnd: newClipPartial.trimEnd ?? clipDur,
       speed: 1.0,
       transition: "crossfade",
       qualityScore: newClipPartial.qualityScore || 90,
@@ -370,7 +373,9 @@ export default function EditorStudioPage() {
         aspectRatio={aspectRatio}
         colorGrade={colorGrade}
         durationSeconds={totalDuration}
+        clips={clips}
       />
     </div>
   );
 }
+

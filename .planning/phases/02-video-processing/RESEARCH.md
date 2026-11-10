@@ -72,3 +72,4 @@ Implemented with native FFmpeg `eq` and `colorbalance` filters (zero external LU
   - Magic-byte header signature verification (`ftyp`, `RIFF`, `\x1A\x45\xDF\xA3`, `\xFF\xD8\xFF`, `\x89PNG`, `ID3`, `fLaC`) to block spoofed files.
   - Internal storage uses strict UUID filenames (`media_<uuid>.<ext>`), preventing directory traversal (`../`) and filename filtergraph injection.
 - **Progress Tracking & Cancellation:** Pass `-progress pipe:1 -nostats` to FFmpeg and parse `out_time_us` against total expected timeline duration to stream accurate percentages (`0–100%`) and support safe process termination on job cancellation.
+

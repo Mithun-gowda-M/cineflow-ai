@@ -265,3 +265,4 @@ export const AiDirectorDrawer: React.FC<AiDirectorDrawerProps> = ({
     </aside>
   );
 };
+

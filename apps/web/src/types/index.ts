@@ -18,8 +18,11 @@ export type ColorGradePreset =
 
 export interface TimelineClip {
   id: string;
+  sourceId?: string;
+  mediaKind?: "video" | "image" | "audio";
   title: string;
   sourceUrl: string;
+  proxyUrl?: string;
   thumbnailUrl: string;
   trackId: "v1" | "v2" | "a1" | "a2" | "t1";
   startTime: number; // in timeline
@@ -69,3 +72,4 @@ export interface UploadedMediaItem {
   blurScore: number; // 0-100 (higher = sharper)
   exposureScore: number; // 0-100 (optimal = 80-100)
 }
+

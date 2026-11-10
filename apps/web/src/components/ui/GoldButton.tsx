@@ -41,3 +41,4 @@ export const GoldButton: React.FC<GoldButtonProps> = ({
     </button>
   );
 };
+

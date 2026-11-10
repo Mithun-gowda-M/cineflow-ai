@@ -1,7 +1,7 @@
 # PROJECT STATE: CINEFLOW AI
 
 > **Current Phase:** Phase 5 (Advanced Cinematic Engine & Audio Intelligence) — COMPLETED  
-> **Next Phase:** Phase 6 (Voice & Conversational Editing) — READY TO PLAN  
+> **Next Phase:** Phase 6 (Voice & Conversational Editing) — PLANNED & READY FOR EXECUTION  
 > **Last Updated:** 2026-11-10
 
 ---
@@ -16,7 +16,7 @@
 | **Phase 3** | AI Media Intelligence & Scene Detection | **COMPLETED** | 2026-11-10 |
 | **Phase 4** | AI Director & Storyboard Generator | **COMPLETED** | 2026-11-10 |
 | **Phase 5** | Advanced Cinematic Engine & Audio Intelligence | **COMPLETED** | 2026-11-10 |
-| **Phase 6** | Voice & Conversational Editing | **READY TO PLAN** | — |
+| **Phase 6** | Voice & Conversational Editing | **PLANNED & READY FOR EXECUTION** | 2026-11-10 |
 | **Phase 7** | Trend Intelligence (Optional Style Recipes) | Queued | — |
 | **Phase 8** | Institutional Campus Deployment & Security | Queued | — |
 | **Phase 9** | Hackathon Presentation & Demonstration Package | Queued | — |
@@ -46,7 +46,6 @@
 ---
 
 ## 4. Immediate Next Actions (Phase 6)
-1. Plan Phase 6 (`/gsd-plan-phase 6`) for local speech-to-text (`faster-whisper` / `whisper.cpp`) transcription, conversational editing commands, and frontend microphone command capture.
-2. Connect voice-driven timeline editing commands directly into the AI Director & Clip Inspector pipeline.
-3. Verify offline voice transcription and conversational edit execution with automated pytest + Next.js build checks.
+1. Execute Phase 6 (`/gsd-execute-phase 6`) to install `faster-whisper`, implement local speech-to-text, conversational timeline editing, diff/Undo-Redo history, partial segment re-rendering, and frontend voice capture.
+2. Verify offline voice transcription, conversational edits, and partial segment cache hit performance with automated pytest + Next.js build checks.
 

@@ -44,3 +44,4 @@ Inspecting `apps/web/src/app/` confirmed three existing Phase 1 stub views ready
 1. `apps/web/src/app/auth/login/page.tsx`: Replace direct `router.push("/dashboard")` with real `POST /api/v1/auth/login`.
 2. `apps/web/src/app/auth/register/page.tsx`: Replace direct `router.push("/dashboard")` with real `POST /api/v1/auth/register`.
 3. `apps/web/src/app/admin/page.tsx`: Replace hardcoded `studentAccounts` array and simulated `setTimeout` purge button with live `/api/v1/admin/overview`, `/api/v1/admin/users`, quota updates (`PATCH`), and real disk cache cleanup (`POST`).
+

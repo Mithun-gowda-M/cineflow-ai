@@ -12,6 +12,7 @@ from typing import Iterator, Literal, Optional
 
 from backend.api.config import get_settings, utc_now_iso
 from backend.api.schemas import (
+    AdminUserRecord,
     AudioAnalysisResult,
     DetectedScene,
     MediaAnalysisResult,
@@ -143,14 +144,33 @@ class Database:
                     recipe_json TEXT NOT NULL,
                     created_at TEXT NOT NULL
                 );
+
+                CREATE TABLE IF NOT EXISTS users (
+                    id TEXT PRIMARY KEY,
+                    full_name TEXT NOT NULL,
+                    email TEXT NOT NULL UNIQUE,
+                    department TEXT NOT NULL DEFAULT 'Computer Science & Engineering',
+                    role TEXT NOT NULL DEFAULT 'student',
+                    password_hash TEXT NOT NULL,
+                    storage_quota_bytes INTEGER NOT NULL,
+                    is_active INTEGER NOT NULL DEFAULT 1,
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL
+                );
                 """
             )
-            # Safe idempotent migration for pre-Phase 3/5/6 SQLite databases
+            # Safe idempotent migration for pre-Phase 3/5/6/8 SQLite databases
             cols = {r["name"] for r in conn.execute("PRAGMA table_info(media_assets)").fetchall()}
             if "analysis_json" not in cols:
                 conn.execute("ALTER TABLE media_assets ADD COLUMN analysis_json TEXT")
             if "audio_analysis_json" not in cols:
                 conn.execute("ALTER TABLE media_assets ADD COLUMN audio_analysis_json TEXT")
+            if "owner_id" not in cols:
+                conn.execute("ALTER TABLE media_assets ADD COLUMN owner_id TEXT")
+
+            proj_cols = {r["name"] for r in conn.execute("PRAGMA table_info(projects)").fetchall()}
+            if "owner_id" not in proj_cols:
+                conn.execute("ALTER TABLE projects ADD COLUMN owner_id TEXT")
 
             job_cols = {r["name"] for r in conn.execute("PRAGMA table_info(render_jobs)").fetchall()}
             if "segment_cache_hits" not in job_cols:
@@ -167,11 +187,12 @@ class Database:
             conn.execute(
                 """
                 INSERT INTO media_assets (
-                    id, original_filename, stored_filename, media_kind, mime_type,
+                    id, owner_id, original_filename, stored_filename, media_kind, mime_type,
                     file_size_bytes, file_path, source_url, thumbnail_url,
                     proxy_url, proxy_path, metadata_json, tags_json, analysis_json, audio_analysis_json, created_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(id) DO UPDATE SET
+                    owner_id = excluded.owner_id,
                     original_filename = excluded.original_filename,
                     stored_filename = excluded.stored_filename,
                     media_kind = excluded.media_kind,
@@ -189,6 +210,7 @@ class Database:
                 """,
                 (
                     asset.id,
+                    asset.owner_id,
                     asset.original_filename,
                     asset.stored_filename,
                     asset.media_kind,
@@ -274,6 +296,7 @@ class Database:
         audio_analysis = AudioAnalysisResult.model_validate_json(audio_raw) if audio_raw else None
         return MediaAsset(
             id=row["id"],
+            owner_id=row["owner_id"] if "owner_id" in keys else None,
             original_filename=row["original_filename"],
             stored_filename=row["stored_filename"],
             media_kind=row["media_kind"],
@@ -334,9 +357,11 @@ class Database:
     # ---- Projects ----
 
     def _row_to_project(self, row: sqlite3.Row) -> ProjectResponse:
+        keys = row.keys()
         timeline = TimelinePlan.model_validate_json(row["timeline_json"]) if row["timeline_json"] else None
         return ProjectResponse(
             id=row["id"],
+            owner_id=row["owner_id"] if "owner_id" in keys else None,
             title=row["title"],
             description=row["description"],
             aspect_ratio=row["aspect_ratio"],
@@ -352,12 +377,13 @@ class Database:
             conn.execute(
                 """
                 INSERT OR REPLACE INTO projects (
-                    id, title, description, aspect_ratio, target_duration_seconds,
+                    id, owner_id, title, description, aspect_ratio, target_duration_seconds,
                     color_grade, timeline_json, created_at, updated_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     project.id,
+                    project.owner_id,
                     project.title,
                     project.description,
                     project.aspect_ratio,
@@ -679,6 +705,157 @@ class Database:
                 return False, True
             cur = conn.execute("DELETE FROM style_recipes WHERE id = ?", (recipe_id,))
             return cur.rowcount > 0, False
+
+    # ---- Phase 8: Users, Ownership Quotas & Diagnostics ----
+
+    def create_user(
+        self,
+        *,
+        user_id: str,
+        full_name: str,
+        email: str,
+        department: str,
+        role: str,
+        password_hash: str,
+        storage_quota_bytes: int,
+        is_active: bool = True,
+    ) -> dict:
+        now = utc_now_iso()
+        norm_email = email.strip().lower()
+        with self._connect() as conn:
+            conn.execute(
+                """
+                INSERT INTO users (
+                    id, full_name, email, department, role, password_hash,
+                    storage_quota_bytes, is_active, created_at, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    user_id,
+                    full_name.strip(),
+                    norm_email,
+                    department.strip(),
+                    role,
+                    password_hash,
+                    storage_quota_bytes,
+                    int(is_active),
+                    now,
+                    now,
+                ),
+            )
+            row = conn.execute("SELECT * FROM users WHERE id = ?", (user_id,)).fetchone()
+            return dict(row)
+
+    def get_user_by_email(self, email: str) -> Optional[dict]:
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT * FROM users WHERE email = ?",
+                (email.strip().lower(),),
+            ).fetchone()
+            return dict(row) if row else None
+
+    def get_user_by_id(self, user_id: str) -> Optional[dict]:
+        with self._connect() as conn:
+            row = conn.execute("SELECT * FROM users WHERE id = ?", (user_id,)).fetchone()
+            return dict(row) if row else None
+
+    def get_user_storage_bytes(self, user_id: str) -> int:
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT COALESCE(SUM(file_size_bytes), 0) AS used FROM media_assets WHERE owner_id = ?",
+                (user_id,),
+            ).fetchone()
+            return int(row["used"]) if row else 0
+
+    def list_users_with_usage(self) -> list[AdminUserRecord]:
+        with self._connect() as conn:
+            rows = conn.execute("SELECT * FROM users ORDER BY created_at DESC").fetchall()
+            records: list[AdminUserRecord] = []
+            for r in rows:
+                uid = r["id"]
+                used_row = conn.execute(
+                    "SELECT COALESCE(SUM(file_size_bytes), 0) AS used FROM media_assets WHERE owner_id = ?",
+                    (uid,),
+                ).fetchone()
+                proj_row = conn.execute(
+                    "SELECT COUNT(*) AS cnt FROM projects WHERE owner_id = ?",
+                    (uid,),
+                ).fetchone()
+                records.append(
+                    AdminUserRecord(
+                        id=uid,
+                        full_name=r["full_name"],
+                        email=r["email"],
+                        department=r["department"],
+                        role=r["role"],
+                        storage_quota_bytes=int(r["storage_quota_bytes"]),
+                        used_storage_bytes=int(used_row["used"]) if used_row else 0,
+                        projects_count=int(proj_row["cnt"]) if proj_row else 0,
+                        is_active=bool(r["is_active"]),
+                        created_at=r["created_at"],
+                    )
+                )
+            return records
+
+    def update_user_admin(
+        self,
+        user_id: str,
+        *,
+        storage_quota_bytes: Optional[int] = None,
+        role: Optional[str] = None,
+        is_active: Optional[bool] = None,
+    ) -> Optional[AdminUserRecord]:
+        fields: list[str] = []
+        values: list[object] = []
+        if storage_quota_bytes is not None:
+            fields.append("storage_quota_bytes = ?")
+            values.append(storage_quota_bytes)
+        if role is not None:
+            fields.append("role = ?")
+            values.append(role)
+        if is_active is not None:
+            fields.append("is_active = ?")
+            values.append(int(is_active))
+
+        if not fields:
+            users = [u for u in self.list_users_with_usage() if u.id == user_id]
+            return users[0] if users else None
+
+        fields.append("updated_at = ?")
+        values.append(utc_now_iso())
+        values.append(user_id)
+
+        with self._connect() as conn:
+            cur = conn.execute(f"UPDATE users SET {', '.join(fields)} WHERE id = ?", values)
+            if cur.rowcount == 0:
+                return None
+        users = [u for u in self.list_users_with_usage() if u.id == user_id]
+        return users[0] if users else None
+
+    def get_render_queue_counts(self) -> dict[str, int]:
+        counts = {"queued": 0, "processing": 0, "completed": 0, "failed": 0, "cancelled": 0}
+        with self._connect() as conn:
+            rows = conn.execute("SELECT status, COUNT(*) AS cnt FROM render_jobs GROUP BY status").fetchall()
+            for r in rows:
+                counts[str(r["status"])] = int(r["cnt"])
+        return counts
+
+    def get_schema_table_counts(self) -> dict[str, int]:
+        tables = (
+            "users",
+            "media_assets",
+            "detected_scenes",
+            "projects",
+            "render_jobs",
+            "timeline_revisions",
+            "style_recipes",
+        )
+        out: dict[str, int] = {}
+        with self._connect() as conn:
+            for tbl in tables:
+                row = conn.execute(f"SELECT COUNT(*) AS cnt FROM {tbl}").fetchone()
+                out[tbl] = int(row["cnt"]) if row else 0
+        return out
 
 
 _db_instance: Optional[Database] = None

@@ -6,7 +6,7 @@ import uuid
 from pathlib import Path
 from typing import Literal, Optional
 
-from fastapi import APIRouter, File, HTTPException, Query, UploadFile
+from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
 
 from backend.api.config import get_settings, utc_now_iso
 from backend.api.database import get_database
@@ -16,7 +16,10 @@ from backend.api.schemas import (
     MediaMetadata,
     MediaSearchResponse,
     MediaUploadResponse,
+    UserPublic,
 )
+from backend.authentication.quotas import enforce_user_quota
+from backend.authentication.security import get_optional_current_user
 from backend.media_analysis.pipeline import analyze_media_asset, search_and_rank_media
 from backend.media_analysis.probe import probe_media_file
 from backend.media_analysis.proxy import generate_thumbnail, generate_video_proxy
@@ -32,7 +35,12 @@ from backend.media_analysis.validator import (
 router = APIRouter(prefix="/media", tags=["Media"])
 
 
-async def _ingest_single_upload(upload: UploadFile, *, run_analysis: bool = True) -> MediaAsset:
+async def _ingest_single_upload(
+    upload: UploadFile,
+    *,
+    run_analysis: bool = True,
+    owner: Optional[UserPublic] = None,
+) -> MediaAsset:
     settings = get_settings()
     db = get_database()
 
@@ -41,12 +49,14 @@ async def _ingest_single_upload(upload: UploadFile, *, run_analysis: bool = True
     media_id, stored_filename = generate_storage_identity(ext)
     dest_path = settings.UPLOAD_DIR / stored_filename
 
-    # Stream file in chunks while checking header magic bytes and enforcing size limits
+    # Stream file in chunks while checking header magic bytes and enforcing size & user quota limits
     first_chunk = await upload.read(64)
     verify_magic_bytes(first_chunk, ext)
 
     total_bytes = len(first_chunk)
     validate_file_size(total_bytes)
+    if owner is not None:
+        enforce_user_quota(owner, total_bytes)
 
     try:
         with dest_path.open("wb") as out_file:
@@ -57,6 +67,8 @@ async def _ingest_single_upload(upload: UploadFile, *, run_analysis: bool = True
                     break
                 total_bytes += len(chunk)
                 validate_file_size(total_bytes)
+                if owner is not None:
+                    enforce_user_quota(owner, total_bytes)
                 out_file.write(chunk)
     except Exception:
         if dest_path.exists():
@@ -97,6 +109,7 @@ async def _ingest_single_upload(upload: UploadFile, *, run_analysis: bool = True
 
     asset = MediaAsset(
         id=media_id,
+        owner_id=owner.id if owner else None,
         original_filename=clean_original,
         stored_filename=stored_filename,
         media_kind=media_kind,
@@ -121,6 +134,7 @@ async def _ingest_single_upload(upload: UploadFile, *, run_analysis: bool = True
 async def upload_media_batch(
     files: list[UploadFile] = File(...),
     analyze: bool = Query(default=True),
+    current_user: Optional[UserPublic] = Depends(get_optional_current_user),
 ) -> MediaUploadResponse:
     """Upload one or more video, image, or audio files with probing, proxies, and CV intelligence."""
     settings = get_settings()
@@ -137,7 +151,7 @@ async def upload_media_batch(
 
     for f in files:
         try:
-            asset = await _ingest_single_upload(f, run_analysis=analyze)
+            asset = await _ingest_single_upload(f, run_analysis=analyze, owner=current_user)
             uploaded.append(asset)
         except MediaValidationError as exc:
             # For single-file uploads, surface exact HTTP error status directly
@@ -220,9 +234,24 @@ def get_media(media_id: str) -> MediaAsset:
 
 
 @router.delete("/{media_id}")
-def delete_media(media_id: str) -> dict[str, str]:
+def delete_media(
+    media_id: str,
+    current_user: Optional[UserPublic] = Depends(get_optional_current_user),
+) -> dict[str, str]:
     """Delete an uploaded media asset along with its generated proxy, thumbnail, and scene crops."""
-    asset = get_database().delete_media_asset(media_id)
+    db = get_database()
+    existing = db.get_media_asset(media_id)
+    if not existing:
+        raise HTTPException(status_code=404, detail="Media asset not found.")
+    if (
+        current_user is not None
+        and existing.owner_id
+        and existing.owner_id != current_user.id
+        and current_user.role not in {"admin", "club_lead"}
+    ):
+        raise HTTPException(status_code=403, detail="Forbidden: cannot delete another student's media asset.")
+
+    asset = db.delete_media_asset(media_id)
     if not asset:
         raise HTTPException(status_code=404, detail="Media asset not found.")
 

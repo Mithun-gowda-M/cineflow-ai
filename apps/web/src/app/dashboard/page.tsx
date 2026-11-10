@@ -1,15 +1,22 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import Link from "next/link";
 import { 
-  Plus, Film, HardDrive, Clock, Sparkles, Sliders, 
-  MoreVertical, Play, ArrowUpRight, FolderGit2, Trash2, Copy 
+  Plus, Film, HardDrive, Clock, Sparkles, 
+  Play, ArrowUpRight, FolderGit2 
 } from "lucide-react";
 import { GlassPanel } from "@/components/ui/GlassPanel";
 import { GoldButton } from "@/components/ui/GoldButton";
 import { Badge } from "@/components/ui/Badge";
 import { Modal } from "@/components/ui/Modal";
+import {
+  createBackendProject,
+  fetchBackendProjects,
+  fetchUserQuota,
+  getStoredAuthToken,
+  listMediaAssets,
+} from "@/lib/api";
 
 interface ProjectItem {
   id: string;
@@ -29,6 +36,9 @@ export default function DashboardPage() {
   const [newRatio, setNewRatio] = useState("16:9");
   const [newDuration, setNewDuration] = useState("120");
   const [newStyle, setNewStyle] = useState("golden_hour");
+  const [usedGb, setUsedGb] = useState<number>(0);
+  const [quotaGb, setQuotaGb] = useState<number>(25.0);
+  const [mediaCount, setMediaCount] = useState<number>(0);
 
   const [projects, setProjects] = useState<ProjectItem[]>([
     {
@@ -66,12 +76,68 @@ export default function DashboardPage() {
     },
   ]);
 
-  const handleCreateProject = (e: React.FormEvent) => {
+  useEffect(() => {
+    const token = getStoredAuthToken();
+    if (token) {
+      fetchUserQuota()
+        .then((q) => {
+          setUsedGb(Number((q.used_bytes / 1024 ** 3).toFixed(3)));
+          setQuotaGb(Number((q.quota_bytes / 1024 ** 3).toFixed(1)));
+        })
+        .catch(() => {});
+    }
+
+    listMediaAssets()
+      .then((assets) => {
+        setMediaCount(assets.length);
+        if (!token) {
+          const totalBytes = assets.reduce((acc, a) => acc + a.file_size_bytes, 0);
+          setUsedGb(Number((totalBytes / 1024 ** 3).toFixed(3)));
+        }
+      })
+      .catch(() => {});
+
+    fetchBackendProjects()
+      .then((rows) => {
+        if (rows.length > 0) {
+          const mapped: ProjectItem[] = rows.map((p) => ({
+            id: p.id,
+            title: p.title,
+            duration: `${Math.floor(p.target_duration_seconds / 60)}:${String(
+              Math.round(p.target_duration_seconds % 60)
+            ).padStart(2, "0")}`,
+            aspectRatio: p.aspect_ratio,
+            clipsCount: 0,
+            colorGrade: p.color_grade.replace(/_/g, " "),
+            updatedAt: p.updated_at,
+            thumbnailUrl:
+              "https://images.unsplash.com/photo-1492691527719-9d1e07e534b4?auto=format&fit=crop&w=800&q=80",
+          }));
+          setProjects((prev) => [...mapped, ...prev.filter((d) => d.isDemo)]);
+        }
+      })
+      .catch(() => {});
+  }, []);
+
+  const handleCreateProject = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newTitle.trim()) return;
 
+    let projId = `proj_${Date.now()}`;
+    try {
+      const created = await createBackendProject({
+        title: newTitle.trim(),
+        aspect_ratio: newRatio,
+        target_duration_seconds: Number(newDuration),
+        color_grade: newStyle,
+      });
+      projId = created.id;
+    } catch {
+      // keep local fallback when backend offline
+    }
+
     const newProject: ProjectItem = {
-      id: `proj_${Date.now()}`,
+      id: projId,
       title: newTitle.trim(),
       duration: `${Math.floor(Number(newDuration) / 60)}:${String(Number(newDuration) % 60).padStart(2, "0")}`,
       aspectRatio: newRatio,
@@ -150,16 +216,19 @@ export default function DashboardPage() {
         {/* Storage Quota Gauge */}
         <GlassPanel variant="surface" className="p-5 space-y-2">
           <div className="flex items-center justify-between text-gray-400 text-xs">
-            <span>Campus Local Storage</span>
+            <span>Campus Local Storage ({mediaCount} assets)</span>
             <HardDrive className="w-4 h-4 text-cine-gold-400" />
           </div>
           <div className="flex items-baseline justify-between">
-            <div className="text-2xl font-bold text-white">4.8 GB</div>
-            <div className="text-xs text-gray-400">/ 25.0 GB Quota</div>
+            <div className="text-2xl font-bold text-white">{usedGb.toFixed(2)} GB</div>
+            <div className="text-xs text-gray-400">/ {quotaGb.toFixed(1)} GB Quota</div>
           </div>
           {/* Progress Bar */}
           <div className="w-full bg-cine-black rounded-full h-2 overflow-hidden border border-cine-border">
-            <div className="bg-gold-gradient h-full rounded-full transition-all" style={{ width: "19.2%" }} />
+            <div
+              className="bg-gold-gradient h-full rounded-full transition-all"
+              style={{ width: `${Math.min(100, Math.max(2, (usedGb / Math.max(0.1, quotaGb)) * 100)).toFixed(1)}%` }}
+            />
           </div>
         </GlassPanel>
       </div>

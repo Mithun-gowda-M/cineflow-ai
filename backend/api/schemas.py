@@ -112,6 +112,7 @@ class AudioAnalysisResult(BaseModel):
 
 class MediaAsset(BaseModel):
     id: str
+    owner_id: Optional[str] = None
     original_filename: str
     stored_filename: str
     media_kind: MediaKind
@@ -237,6 +238,7 @@ class ProjectUpdate(BaseModel):
 
 class ProjectResponse(BaseModel):
     id: str
+    owner_id: Optional[str] = None
     title: str
     description: str = ""
     aspect_ratio: AspectRatio
@@ -524,4 +526,123 @@ class StyleApplyResponse(BaseModel):
     history_count: int = 0
     can_undo: bool = False
     can_redo: bool = False
+
+
+# ---- Phase 8: Institutional Campus Auth, Quotas, Cleanup & Admin Schemas ----
+
+UserRole = Literal["student", "club_lead", "admin"]
+
+
+class UserPublic(BaseModel):
+    id: str
+    full_name: str
+    email: str
+    department: str = "Computer Science & Engineering"
+    role: UserRole = "student"
+    storage_quota_bytes: int
+    used_storage_bytes: int = 0
+    is_active: bool = True
+    created_at: str
+
+
+class RegisterRequest(BaseModel):
+    full_name: str = Field(min_length=2, max_length=120)
+    email: str = Field(min_length=5, max_length=180)
+    password: str = Field(min_length=6, max_length=128)
+    department: str = Field(default="Computer Science & Engineering", max_length=120)
+    role: UserRole = "student"
+
+
+class LoginRequest(BaseModel):
+    email: str = Field(min_length=5, max_length=180)
+    password: str = Field(min_length=1, max_length=128)
+
+
+class AuthTokenResponse(BaseModel):
+    access_token: str
+    token_type: Literal["bearer"] = "bearer"
+    expires_in_seconds: int
+    user: UserPublic
+
+
+class QuotaStatusResponse(BaseModel):
+    user_id: str
+    email: str
+    used_bytes: int
+    quota_bytes: int
+    remaining_bytes: int
+    percent_used: float
+
+
+class AdminUserRecord(BaseModel):
+    id: str
+    full_name: str
+    email: str
+    department: str
+    role: UserRole
+    storage_quota_bytes: int
+    used_storage_bytes: int
+    projects_count: int
+    is_active: bool
+    created_at: str
+
+
+class AdminUserUpdateRequest(BaseModel):
+    storage_quota_gb: Optional[float] = Field(default=None, ge=0.001, le=2000.0)
+    storage_quota_bytes: Optional[int] = Field(default=None, ge=1024)
+    role: Optional[UserRole] = None
+    is_active: Optional[bool] = None
+
+
+class DirectoryStorageBreakdown(BaseModel):
+    uploads_bytes: int
+    proxies_bytes: int
+    renders_bytes: int
+    cache_bytes: int
+    segment_cache_bytes: int
+    total_managed_bytes: int
+
+
+class SystemResourceTelemetry(BaseModel):
+    cpu_percent: float
+    cpu_cores: int
+    memory_used_gb: float
+    memory_total_gb: float
+    memory_percent: float
+    disk_free_gb: float
+    disk_total_gb: float
+    hardware_encoder: str
+
+
+class AdminOverviewResponse(BaseModel):
+    system: SystemResourceTelemetry
+    storage: DirectoryStorageBreakdown
+    active_users_count: int
+    total_users_count: int
+    total_projects_count: int
+    total_media_assets_count: int
+    render_queue: dict[str, int]
+    database_engine: str
+
+
+class CleanupRequest(BaseModel):
+    purge_cache: bool = True
+    purge_expired_renders: bool = True
+    max_age_hours: int = Field(default=24, ge=0, le=8760)
+
+
+class CleanupResponse(BaseModel):
+    files_removed: int
+    freed_bytes: int
+    post_cleanup_storage: DirectoryStorageBreakdown
+    executed_at: str = Field(default_factory=utc_now_iso)
+
+
+class MigrationStatusResponse(BaseModel):
+    active_engine: str
+    configured_database_url: str
+    schema_version: str
+    postgres_ddl_ready: bool
+    table_counts: dict[str, int]
+    postgres_migration_cli: str = "backend\\.venv\\Scripts\\python.exe -m backend.migrations.sqlite_to_postgres --dry-run"
 

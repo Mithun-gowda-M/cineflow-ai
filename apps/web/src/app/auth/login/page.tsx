@@ -3,24 +3,44 @@
 import React, { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Film, Lock, Mail, Sparkles, ArrowRight, ShieldCheck } from "lucide-react";
+import { Film, Lock, Mail, Sparkles, ArrowRight, ShieldCheck, AlertCircle, RefreshCw } from "lucide-react";
 import { GlassPanel } from "@/components/ui/GlassPanel";
 import { GoldButton } from "@/components/ui/GoldButton";
-import { Badge } from "@/components/ui/Badge";
+import { loginStudent } from "@/lib/api";
 
 export default function LoginPage() {
   const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [errorMsg, setErrorMsg] = useState("");
 
-  const handleLogin = (e: React.FormEvent) => {
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    router.push("/dashboard");
+    setLoading(true);
+    setErrorMsg("");
+    try {
+      const auth = await loginStudent({ email: email.trim(), password });
+      if (auth.user.role === "admin" || auth.user.role === "club_lead") {
+        router.push("/admin");
+      } else {
+        router.push("/dashboard");
+      }
+    } catch (err) {
+      setErrorMsg(err instanceof Error ? err.message : "Authentication failed.");
+    } finally {
+      setLoading(false);
+    }
   };
 
   const fillDemoStudent = () => {
     setEmail("student.innovator@bmsit.in");
     setPassword("bmsit2026cineflow");
+  };
+
+  const fillDemoAdmin = () => {
+    setEmail("media.club@bmsit.in");
+    setPassword("bmsit2026admin");
   };
 
   return (
@@ -37,8 +57,15 @@ export default function LoginPage() {
               </div>
             </div>
             <h1 className="text-2xl font-bold text-white tracking-wide">CINEFLOW AI</h1>
-            <p className="text-xs text-gray-400">Institutional Student & Club Portal</p>
+            <p className="text-xs text-gray-400">Institutional JWT Portal • BMSIT Open Studio</p>
           </div>
+
+          {errorMsg && (
+            <div className="p-3 rounded-lg bg-red-500/15 border border-red-500/30 text-xs text-red-300 flex items-center gap-2">
+              <AlertCircle className="w-4 h-4 shrink-0" />
+              <span>{errorMsg}</span>
+            </div>
+          )}
 
           {/* Form */}
           <form onSubmit={handleLogin} className="space-y-4">
@@ -77,25 +104,45 @@ export default function LoginPage() {
             </div>
 
             <div className="pt-2">
-              <GoldButton type="submit" size="md" className="w-full" icon={<ArrowRight className="w-4 h-4" />}>
-                Enter Studio Dashboard
+              <GoldButton
+                type="submit"
+                size="md"
+                className="w-full"
+                disabled={loading}
+                icon={loading ? <RefreshCw className="w-4 h-4 animate-spin" /> : <ArrowRight className="w-4 h-4" />}
+              >
+                {loading ? "Signing In..." : "Authenticate & Enter Studio"}
               </GoldButton>
             </div>
           </form>
 
-          {/* Demo Shortcut */}
-          <div className="pt-2 border-t border-cine-border text-center">
-            <button
-              type="button"
-              onClick={fillDemoStudent}
-              className="text-xs text-cine-gold-400 hover:underline inline-flex items-center gap-1 font-medium"
-            >
-              <Sparkles className="w-3.5 h-3.5" /> Auto-Fill BMSIT Demo Account
-            </button>
+          {/* Demo Shortcuts & Register */}
+          <div className="pt-3 border-t border-cine-border flex flex-col items-center gap-2 text-center">
+            <div className="flex flex-wrap items-center justify-center gap-4">
+              <button
+                type="button"
+                onClick={fillDemoStudent}
+                className="text-xs text-cine-gold-400 hover:underline inline-flex items-center gap-1 font-medium"
+              >
+                <Sparkles className="w-3.5 h-3.5" /> Demo Student
+              </button>
+              <button
+                type="button"
+                onClick={fillDemoAdmin}
+                className="text-xs text-cine-cyan-400 hover:underline inline-flex items-center gap-1 font-medium"
+              >
+                <ShieldCheck className="w-3.5 h-3.5" /> Demo Club Admin
+              </button>
+            </div>
+            <p className="text-xs text-gray-400 mt-1">
+              New BMSIT member?{" "}
+              <Link href="/auth/register" className="text-cine-gold-400 hover:underline">
+                Register account
+              </Link>
+            </p>
           </div>
         </GlassPanel>
       </div>
     </div>
   );
 }
-

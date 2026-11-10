@@ -180,6 +180,7 @@ export async function uploadMediaBatch(
 
   const res = await fetch(`${API_BASE_URL}/media/upload`, {
     method: "POST",
+    headers: getAuthHeaders(),
     body: formData,
   });
 
@@ -193,6 +194,7 @@ export async function uploadMediaBatch(
 export async function deleteMediaAsset(mediaId: string): Promise<void> {
   const res = await fetch(`${API_BASE_URL}/media/${encodeURIComponent(mediaId)}`, {
     method: "DELETE",
+    headers: getAuthHeaders(),
   });
   if (!res.ok) throw new Error(`Delete failed (${res.status})`);
 }
@@ -760,5 +762,257 @@ export async function applyStyleRecipe(params: {
     throw new Error(errBody.detail || `Failed to apply style recipe (${res.status})`);
   }
   return (await res.json()) as BackendStyleApplyResponse;
+}
+
+// ---- Phase 8: Campus Authentication, Quotas, Admin & Migrations ----
+
+export type BackendUserRole = "student" | "club_lead" | "admin";
+
+export interface BackendUserPublic {
+  id: string;
+  full_name: string;
+  email: string;
+  department: string;
+  role: BackendUserRole;
+  storage_quota_bytes: number;
+  used_storage_bytes: number;
+  is_active: boolean;
+  created_at: string;
+}
+
+export interface BackendAuthTokenResponse {
+  access_token: string;
+  token_type: "bearer";
+  expires_in_seconds: number;
+  user: BackendUserPublic;
+}
+
+export interface BackendQuotaStatus {
+  user_id: string;
+  email: string;
+  used_bytes: number;
+  quota_bytes: number;
+  remaining_bytes: number;
+  percent_used: number;
+}
+
+export interface BackendAdminUserRecord {
+  id: string;
+  full_name: string;
+  email: string;
+  department: string;
+  role: BackendUserRole;
+  storage_quota_bytes: number;
+  used_storage_bytes: number;
+  projects_count: number;
+  is_active: boolean;
+  created_at: string;
+}
+
+export interface BackendDirectoryStorage {
+  uploads_bytes: number;
+  proxies_bytes: number;
+  renders_bytes: number;
+  cache_bytes: number;
+  segment_cache_bytes: number;
+  total_managed_bytes: number;
+}
+
+export interface BackendAdminOverview {
+  system: {
+    cpu_percent: number;
+    cpu_cores: number;
+    memory_used_gb: number;
+    memory_total_gb: number;
+    memory_percent: number;
+    disk_free_gb: number;
+    disk_total_gb: number;
+    hardware_encoder: string;
+  };
+  storage: BackendDirectoryStorage;
+  active_users_count: number;
+  total_users_count: number;
+  total_projects_count: number;
+  total_media_assets_count: number;
+  render_queue: Record<string, number>;
+  database_engine: string;
+}
+
+export interface BackendCleanupResponse {
+  files_removed: number;
+  freed_bytes: number;
+  post_cleanup_storage: BackendDirectoryStorage;
+  executed_at: string;
+}
+
+export interface BackendMigrationStatus {
+  active_engine: string;
+  configured_database_url: string;
+  schema_version: string;
+  postgres_ddl_ready: boolean;
+  table_counts: Record<string, number>;
+  postgres_migration_cli: string;
+}
+
+const TOKEN_STORAGE_KEY = "cineflow_jwt_token";
+const USER_STORAGE_KEY = "cineflow_auth_user";
+
+export function getStoredAuthToken(): string | null {
+  if (typeof window === "undefined") return null;
+  return window.localStorage.getItem(TOKEN_STORAGE_KEY);
+}
+
+export function getStoredAuthUser(): BackendUserPublic | null {
+  if (typeof window === "undefined") return null;
+  const raw = window.localStorage.getItem(USER_STORAGE_KEY);
+  if (!raw) return null;
+  try {
+    return JSON.parse(raw) as BackendUserPublic;
+  } catch {
+    return null;
+  }
+}
+
+export function saveAuthSession(token: string, user: BackendUserPublic): void {
+  if (typeof window === "undefined") return;
+  window.localStorage.setItem(TOKEN_STORAGE_KEY, token);
+  window.localStorage.setItem(USER_STORAGE_KEY, JSON.stringify(user));
+  window.dispatchEvent(new Event("cineflow-auth-changed"));
+}
+
+export function clearAuthSession(): void {
+  if (typeof window === "undefined") return;
+  window.localStorage.removeItem(TOKEN_STORAGE_KEY);
+  window.localStorage.removeItem(USER_STORAGE_KEY);
+  window.dispatchEvent(new Event("cineflow-auth-changed"));
+}
+
+export function getAuthHeaders(): Record<string, string> {
+  const token = getStoredAuthToken();
+  return token ? { Authorization: `Bearer ${token}` } : {};
+}
+
+export async function loginStudent(params: {
+  email: string;
+  password: string;
+}): Promise<BackendAuthTokenResponse> {
+  const res = await fetch(`${API_BASE_URL}/auth/login`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(params),
+  });
+  if (!res.ok) {
+    const errBody = await res.json().catch(() => ({ detail: res.statusText }));
+    throw new Error(errBody.detail || `Login failed (${res.status})`);
+  }
+  const data = (await res.json()) as BackendAuthTokenResponse;
+  saveAuthSession(data.access_token, data.user);
+  return data;
+}
+
+export async function registerStudent(params: {
+  full_name: string;
+  email: string;
+  password: string;
+  department: string;
+}): Promise<BackendAuthTokenResponse> {
+  const res = await fetch(`${API_BASE_URL}/auth/register`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(params),
+  });
+  if (!res.ok) {
+    const errBody = await res.json().catch(() => ({ detail: res.statusText }));
+    throw new Error(errBody.detail || `Registration failed (${res.status})`);
+  }
+  const data = (await res.json()) as BackendAuthTokenResponse;
+  saveAuthSession(data.access_token, data.user);
+  return data;
+}
+
+export async function fetchUserQuota(): Promise<BackendQuotaStatus> {
+  const res = await fetch(`${API_BASE_URL}/auth/quota`, { headers: getAuthHeaders() });
+  if (!res.ok) throw new Error(`Failed to fetch user quota (${res.status})`);
+  return (await res.json()) as BackendQuotaStatus;
+}
+
+export async function fetchBackendProjects(): Promise<
+  { id: string; title: string; aspect_ratio: string; target_duration_seconds: number; color_grade: string; updated_at: string }[]
+> {
+  const res = await fetch(`${API_BASE_URL}/projects`, { headers: getAuthHeaders() });
+  if (!res.ok) throw new Error(`Failed to fetch projects (${res.status})`);
+  return await res.json();
+}
+
+export async function createBackendProject(params: {
+  title: string;
+  aspect_ratio: string;
+  target_duration_seconds: number;
+  color_grade: string;
+}): Promise<{ id: string; title: string; aspect_ratio: string; target_duration_seconds: number; color_grade: string; updated_at: string }> {
+  const res = await fetch(`${API_BASE_URL}/projects`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...getAuthHeaders() },
+    body: JSON.stringify(params),
+  });
+  if (!res.ok) throw new Error(`Project creation failed (${res.status})`);
+  return await res.json();
+}
+
+export async function getAdminOverview(): Promise<BackendAdminOverview> {
+  const res = await fetch(`${API_BASE_URL}/admin/overview`, { headers: getAuthHeaders() });
+  if (!res.ok) {
+    const errBody = await res.json().catch(() => ({ detail: res.statusText }));
+    throw new Error(errBody.detail || `Admin access denied (${res.status})`);
+  }
+  return (await res.json()) as BackendAdminOverview;
+}
+
+export async function getAdminUsers(): Promise<BackendAdminUserRecord[]> {
+  const res = await fetch(`${API_BASE_URL}/admin/users`, { headers: getAuthHeaders() });
+  if (!res.ok) {
+    const errBody = await res.json().catch(() => ({ detail: res.statusText }));
+    throw new Error(errBody.detail || `Failed to load campus users (${res.status})`);
+  }
+  return (await res.json()) as BackendAdminUserRecord[];
+}
+
+export async function updateAdminUser(
+  userId: string,
+  updates: { storage_quota_gb?: number; role?: BackendUserRole; is_active?: boolean }
+): Promise<BackendAdminUserRecord> {
+  const res = await fetch(`${API_BASE_URL}/admin/users/${encodeURIComponent(userId)}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json", ...getAuthHeaders() },
+    body: JSON.stringify(updates),
+  });
+  if (!res.ok) {
+    const errBody = await res.json().catch(() => ({ detail: res.statusText }));
+    throw new Error(errBody.detail || `User update failed (${res.status})`);
+  }
+  return (await res.json()) as BackendAdminUserRecord;
+}
+
+export async function triggerAdminCleanup(params: {
+  purge_cache: boolean;
+  purge_expired_renders: boolean;
+  max_age_hours: number;
+}): Promise<BackendCleanupResponse> {
+  const res = await fetch(`${API_BASE_URL}/admin/cleanup`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...getAuthHeaders() },
+    body: JSON.stringify(params),
+  });
+  if (!res.ok) {
+    const errBody = await res.json().catch(() => ({ detail: res.statusText }));
+    throw new Error(errBody.detail || `Cleanup failed (${res.status})`);
+  }
+  return (await res.json()) as BackendCleanupResponse;
+}
+
+export async function getAdminMigrationStatus(): Promise<BackendMigrationStatus> {
+  const res = await fetch(`${API_BASE_URL}/admin/migration-status`, { headers: getAuthHeaders() });
+  if (!res.ok) throw new Error(`Failed to fetch migration status (${res.status})`);
+  return (await res.json()) as BackendMigrationStatus;
 }
 

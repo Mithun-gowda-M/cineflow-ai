@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 import uuid
+from typing import Optional
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 
 from backend.api.config import utc_now_iso
 from backend.api.database import get_database
@@ -13,16 +14,22 @@ from backend.api.schemas import (
     ProjectHistoryResponse,
     ProjectResponse,
     ProjectUpdate,
+    UserPublic,
 )
+from backend.authentication.security import get_optional_current_user
 
 router = APIRouter(prefix="/projects", tags=["Projects"])
 
 
 @router.post("", response_model=ProjectResponse, status_code=201)
-def create_project(payload: ProjectCreate) -> ProjectResponse:
+def create_project(
+    payload: ProjectCreate,
+    current_user: Optional[UserPublic] = Depends(get_optional_current_user),
+) -> ProjectResponse:
     now = utc_now_iso()
     project = ProjectResponse(
         id=f"proj_{uuid.uuid4().hex[:10]}",
+        owner_id=current_user.id if current_user else None,
         title=payload.title.strip(),
         description=payload.description,
         aspect_ratio=payload.aspect_ratio,

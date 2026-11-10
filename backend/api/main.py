@@ -10,7 +10,9 @@ from fastapi.staticfiles import StaticFiles
 
 from backend.api.config import get_settings
 from backend.api.database import get_database
+from backend.api.routes_admin import router as admin_router
 from backend.api.routes_audio import router as audio_router
+from backend.api.routes_auth import router as auth_router
 from backend.api.routes_director import router as director_router
 from backend.api.routes_media import router as media_router
 from backend.api.routes_projects import router as projects_router
@@ -18,6 +20,8 @@ from backend.api.routes_render import router as render_router
 from backend.api.routes_trends import router as trends_router
 from backend.api.routes_voice import router as voice_router
 from backend.api.schemas import HardwareProfileInfo, HealthResponse
+from backend.authentication.security import seed_default_institutional_accounts
+from backend.rendering.cleanup import purge_storage_caches
 from backend.video_engine.ffmpeg_runner import get_binary_info
 from backend.video_engine.hardware import detect_hardware_profile
 
@@ -28,6 +32,12 @@ async def lifespan(_app: FastAPI):
     settings.ensure_directories()
     db = get_database()
     db.mark_interrupted_jobs()
+    seed_default_institutional_accounts()
+    purge_storage_caches(
+        purge_cache=True,
+        purge_expired_renders=False,
+        max_age_hours=settings.CACHE_TTL_HOURS,
+    )
     detect_hardware_profile()
     yield
 
@@ -58,6 +68,8 @@ def create_app() -> FastAPI:
 
     api_prefix = f"/api/{settings.API_VERSION}"
     app.include_router(media_router, prefix=api_prefix)
+    app.include_router(auth_router, prefix=api_prefix)
+    app.include_router(admin_router, prefix=api_prefix)
     app.include_router(audio_router, prefix=api_prefix)
     app.include_router(projects_router, prefix=api_prefix)
     app.include_router(render_router, prefix=api_prefix)

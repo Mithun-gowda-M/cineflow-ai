@@ -75,6 +75,15 @@ class Settings(BaseSettings):
     # Partial Segment Render Caching
     MAX_SEGMENT_CACHE_MB: int = 1024
 
+    # Phase 8: Institutional Campus Deployment, Auth & Quotas
+    JWT_ALGORITHM: str = "HS256"
+    JWT_EXPIRE_MINUTES: int = 720
+    RESTRICT_COLLEGE_EMAIL_DOMAIN: bool = False
+    ALLOWED_AUTH_DOMAINS: str = "bmsit.in,bmsit.ac.in"
+    REQUIRE_AUTH_FOR_MEDIA: bool = False
+    CACHE_TTL_HOURS: int = 24
+    DATABASE_URL: str = "sqlite:///./data/cineflow.db"
+
     @property
     def cors_origins(self) -> list[str]:
         return [origin.strip() for origin in self.ALLOWED_ORIGINS.split(",") if origin.strip()]

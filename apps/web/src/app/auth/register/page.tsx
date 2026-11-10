@@ -3,10 +3,10 @@
 import React, { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Film, Lock, Mail, User, ArrowRight, ShieldCheck } from "lucide-react";
+import { Lock, Mail, User, ArrowRight, AlertCircle, RefreshCw } from "lucide-react";
 import { GlassPanel } from "@/components/ui/GlassPanel";
 import { GoldButton } from "@/components/ui/GoldButton";
-import { Badge } from "@/components/ui/Badge";
+import { registerStudent } from "@/lib/api";
 
 export default function RegisterPage() {
   const router = useRouter();
@@ -14,10 +14,26 @@ export default function RegisterPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [department, setDepartment] = useState("Computer Science & Engineering");
+  const [loading, setLoading] = useState(false);
+  const [errorMsg, setErrorMsg] = useState("");
 
-  const handleRegister = (e: React.FormEvent) => {
+  const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
-    router.push("/dashboard");
+    setLoading(true);
+    setErrorMsg("");
+    try {
+      await registerStudent({
+        full_name: name.trim(),
+        email: email.trim(),
+        password,
+        department,
+      });
+      router.push("/dashboard");
+    } catch (err) {
+      setErrorMsg(err instanceof Error ? err.message : "Registration failed.");
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -30,6 +46,13 @@ export default function RegisterPage() {
             <h1 className="text-2xl font-bold text-white tracking-wide">Student Onboarding</h1>
             <p className="text-xs text-gray-400">Join BMSIT CINEFLOW AI Production Network</p>
           </div>
+
+          {errorMsg && (
+            <div className="p-3 rounded-lg bg-red-500/15 border border-red-500/30 text-xs text-red-300 flex items-center gap-2">
+              <AlertCircle className="w-4 h-4 shrink-0" />
+              <span>{errorMsg}</span>
+            </div>
+          )}
 
           <form onSubmit={handleRegister} className="space-y-4">
             <div>
@@ -84,13 +107,14 @@ export default function RegisterPage() {
 
             <div>
               <label className="block text-xs font-semibold text-gray-300 mb-1">
-                Password
+                Password (min 6 chars)
               </label>
               <div className="relative">
                 <Lock className="w-4 h-4 text-gray-500 absolute left-3 top-3" />
                 <input
                   type="password"
                   required
+                  minLength={6}
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   placeholder="••••••••••••"
@@ -100,8 +124,14 @@ export default function RegisterPage() {
             </div>
 
             <div className="pt-2">
-              <GoldButton type="submit" size="md" className="w-full" icon={<ArrowRight className="w-4 h-4" />}>
-                Create Free Student Account
+              <GoldButton
+                type="submit"
+                size="md"
+                className="w-full"
+                disabled={loading}
+                icon={loading ? <RefreshCw className="w-4 h-4 animate-spin" /> : <ArrowRight className="w-4 h-4" />}
+              >
+                {loading ? "Creating Account..." : "Create Free Student Account"}
               </GoldButton>
             </div>
           </form>
@@ -117,4 +147,3 @@ export default function RegisterPage() {
     </div>
   );
 }
-

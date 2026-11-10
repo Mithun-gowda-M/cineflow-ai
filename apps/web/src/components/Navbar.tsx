@@ -1,15 +1,24 @@
 "use client";
 
-import React from "react";
+import React, { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Film, Sparkles, LayoutDashboard, UploadCloud, Sliders, ShieldCheck } from "lucide-react";
+import { Film, Sparkles, LayoutDashboard, UploadCloud, ShieldCheck, LogIn, LogOut } from "lucide-react";
 import { GoldButton } from "./ui/GoldButton";
 import { Badge } from "./ui/Badge";
 import { cn } from "@/lib/utils";
+import { BackendUserPublic, clearAuthSession, getStoredAuthUser } from "@/lib/api";
 
 export const Navbar: React.FC = () => {
   const pathname = usePathname();
+  const [authUser, setAuthUser] = useState<BackendUserPublic | null>(null);
+
+  useEffect(() => {
+    const sync = () => setAuthUser(getStoredAuthUser());
+    sync();
+    window.addEventListener("cineflow-auth-changed", sync);
+    return () => window.removeEventListener("cineflow-auth-changed", sync);
+  }, []);
 
   // If in editor, render full-width editor navbar instead of default landing navbar
   if (pathname === "/editor") {
@@ -67,7 +76,27 @@ export const Navbar: React.FC = () => {
 
         {/* Right CTA */}
         <div className="flex items-center gap-3">
-          <Badge variant="gold" className="hidden lg:inline-flex">
+          {authUser ? (
+            <div className="hidden lg:flex items-center gap-2 px-2.5 py-1 rounded-lg bg-cine-surface border border-cine-border text-xs">
+              <span className="text-cine-gold-300 font-mono truncate max-w-[150px]">{authUser.email}</span>
+              <button
+                type="button"
+                onClick={() => clearAuthSession()}
+                className="text-gray-400 hover:text-red-400"
+                title="Sign Out"
+              >
+                <LogOut className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          ) : (
+            <Link
+              href="/auth/login"
+              className="hidden lg:inline-flex items-center gap-1.5 text-xs text-gray-300 hover:text-cine-gold-300 px-2.5 py-1.5 rounded-lg border border-cine-border"
+            >
+              <LogIn className="w-3.5 h-3.5" /> Student Login
+            </Link>
+          )}
+          <Badge variant="gold" className="hidden xl:inline-flex">
             BMSIT Open Studio
           </Badge>
           <Link href="/editor">

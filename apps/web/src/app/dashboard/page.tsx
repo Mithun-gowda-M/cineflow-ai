@@ -2,9 +2,10 @@
 
 import React, { useEffect, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { 
   Plus, Film, HardDrive, Clock, Sparkles, 
-  Play, ArrowUpRight, FolderGit2 
+  Play, ArrowUpRight, FolderGit2, Loader2 
 } from "lucide-react";
 import { GlassPanel } from "@/components/ui/GlassPanel";
 import { GoldButton } from "@/components/ui/GoldButton";
@@ -16,6 +17,7 @@ import {
   fetchUserQuota,
   getStoredAuthToken,
   listMediaAssets,
+  loadShowcaseProject,
 } from "@/lib/api";
 
 interface ProjectItem {
@@ -31,7 +33,10 @@ interface ProjectItem {
 }
 
 export default function DashboardPage() {
+  const router = useRouter();
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [loadingShowcase, setLoadingShowcase] = useState(false);
+  const [showcaseError, setShowcaseError] = useState("");
   const [newTitle, setNewTitle] = useState("");
   const [newRatio, setNewRatio] = useState("16:9");
   const [newDuration, setNewDuration] = useState("120");
@@ -168,7 +173,27 @@ export default function DashboardPage() {
           </p>
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-3">
+          <GoldButton
+            variant="secondary"
+            size="md"
+            icon={loadingShowcase ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4 text-cine-cyan-400" />}
+            onClick={async () => {
+              setLoadingShowcase(true);
+              setShowcaseError("");
+              try {
+                const res = await loadShowcaseProject(false);
+                router.push(`/editor?projectId=${encodeURIComponent(res.project.id)}`);
+              } catch (err) {
+                setShowcaseError(err instanceof Error ? err.message : "Unable to load HD Showcase (start backend first).");
+              } finally {
+                setLoadingShowcase(false);
+              }
+            }}
+            disabled={loadingShowcase}
+          >
+            {loadingShowcase ? "Ingesting 1080p Showcase..." : "Load Live HD Showcase"}
+          </GoldButton>
           <Link href="/upload">
             <GoldButton variant="secondary" size="md" icon={<Film className="w-4 h-4" />}>
               Ingest Media
@@ -183,6 +208,12 @@ export default function DashboardPage() {
           </GoldButton>
         </div>
       </div>
+
+      {showcaseError && (
+        <div className="p-3 rounded-lg bg-red-500/10 border border-red-500/30 text-xs text-red-300">
+          {showcaseError}
+        </div>
+      )}
 
       {/* Metric Cards & Storage Gauge */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
@@ -278,7 +309,7 @@ export default function DashboardPage() {
 
                   {/* Center Play Button on hover */}
                   <Link
-                    href="/editor"
+                    href={proj.isDemo ? "/editor" : `/editor?projectId=${encodeURIComponent(proj.id)}`}
                     className="absolute inset-0 m-auto w-12 h-12 rounded-full bg-cine-black/75 border border-cine-gold-500/60 flex items-center justify-center text-cine-gold-400 opacity-0 group-hover:opacity-100 transition-opacity backdrop-blur-md"
                   >
                     <Play className="w-5 h-5 ml-0.5" />
@@ -302,7 +333,7 @@ export default function DashboardPage() {
               <div className="px-5 pb-5 pt-2 border-t border-cine-border flex items-center justify-between">
                 <span className="text-[11px] text-gray-500">Updated {proj.updatedAt}</span>
                 <div className="flex items-center gap-2">
-                  <Link href="/editor">
+                  <Link href={proj.isDemo ? "/editor" : `/editor?projectId=${encodeURIComponent(proj.id)}`}>
                     <GoldButton size="sm" icon={<ArrowUpRight className="w-3.5 h-3.5" />}>
                       Open Editor
                     </GoldButton>

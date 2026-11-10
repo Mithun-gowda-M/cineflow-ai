@@ -20,9 +20,11 @@ from backend.api.schemas import (
 )
 from backend.authentication.quotas import enforce_user_quota
 from backend.authentication.security import get_optional_current_user
-from backend.media_analysis.pipeline import analyze_media_asset, search_and_rank_media
-from backend.media_analysis.probe import probe_media_file
-from backend.media_analysis.proxy import generate_thumbnail, generate_video_proxy
+from backend.media_analysis.pipeline import (
+    analyze_media_asset,
+    finalize_local_media_ingest,
+    search_and_rank_media,
+)
 from backend.media_analysis.validator import (
     MediaValidationError,
     classify_extension,
@@ -75,59 +77,18 @@ async def _ingest_single_upload(
             dest_path.unlink(missing_ok=True)
         raise
 
-    try:
-        metadata: MediaMetadata = probe_media_file(dest_path, is_image=(media_kind == "image"))
-    except Exception as exc:
-        dest_path.unlink(missing_ok=True)
-        raise MediaValidationError(f"Failed to probe media stream: {exc}", status_code=422) from exc
-
-    thumbnail_url: Optional[str] = None
-    proxy_url: Optional[str] = None
-    proxy_path_str: Optional[str] = None
-
-    if media_kind in {"video", "image"}:
-        thumb_path = generate_thumbnail(
-            dest_path,
-            media_id,
-            metadata.duration_seconds,
-            is_image=(media_kind == "image"),
-        )
-        if thumb_path:
-            thumbnail_url = f"/static/proxies/{thumb_path.name}"
-
-    if media_kind == "video":
-        proxy_path = generate_video_proxy(dest_path, media_id, metadata.has_audio)
-        if proxy_path:
-            proxy_path_str = str(proxy_path)
-            proxy_url = f"/static/proxies/{proxy_path.name}"
-
-    tags = [media_kind]
-    if metadata.width and metadata.height:
-        tags.append("portrait" if metadata.height > metadata.width else "landscape")
-    if metadata.fps >= 50:
-        tags.append("high-fps")
-
-    asset = MediaAsset(
-        id=media_id,
-        owner_id=owner.id if owner else None,
+    return finalize_local_media_ingest(
+        dest_path=dest_path,
+        media_id=media_id,
         original_filename=clean_original,
         stored_filename=stored_filename,
         media_kind=media_kind,
         mime_type=mime_type,
-        file_size_bytes=total_bytes,
-        file_path=str(dest_path),
-        source_url=f"/static/uploads/{stored_filename}",
-        thumbnail_url=thumbnail_url,
-        proxy_url=proxy_url,
-        proxy_path=proxy_path_str,
-        metadata=metadata,
-        tags=tags,
-        created_at=utc_now_iso(),
+        total_bytes=total_bytes,
+        owner_id=owner.id if owner else None,
+        run_analysis=run_analysis,
+        cleanup_on_probe_error=True,
     )
-    saved = db.save_media_asset(asset)
-    if run_analysis:
-        saved = analyze_media_asset(saved)
-    return saved
 
 
 @router.post("/upload", response_model=MediaUploadResponse)

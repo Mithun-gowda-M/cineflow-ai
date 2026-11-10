@@ -3,7 +3,7 @@
 import React, { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Film, Sparkles, LayoutDashboard, UploadCloud, ShieldCheck, LogIn, LogOut } from "lucide-react";
+import { Film, Sparkles, LayoutDashboard, UploadCloud, ShieldCheck, LogIn, LogOut, Presentation } from "lucide-react";
 import { GoldButton } from "./ui/GoldButton";
 import { Badge } from "./ui/Badge";
 import { cn } from "@/lib/utils";
@@ -28,6 +28,7 @@ export const Navbar: React.FC = () => {
   const links = [
     { href: "/", label: "Home" },
     { href: "/features", label: "Technology" },
+    { href: "/showcase", label: "Showcase", icon: <Presentation className="w-4 h-4" /> },
     { href: "/dashboard", label: "Dashboard", icon: <LayoutDashboard className="w-4 h-4" /> },
     { href: "/upload", label: "Media Hub", icon: <UploadCloud className="w-4 h-4" /> },
     { href: "/admin", label: "Admin", icon: <ShieldCheck className="w-4 h-4" /> },

@@ -1,0 +1,85 @@
+{
+  "generated_at": "2026-11-10T15:41:22Z",
+  "host_os": "Windows 11 (AMD64)",
+  "python_version": "3.12.10",
+  "cpu_cores": 16,
+  "ram_total_gb": 15.7,
+  "ffmpeg_version": "ffmpeg version 9.0.2-full_build-www.gyan.dev Copyright (c) 2000-2026 the FFmpeg developers",
+  "hardware_profile": {
+    "profile": "high",
+    "cpu_cores": 16,
+    "free_disk_gb": 339.95,
+    "video_encoder": "h264_qsv",
+    "hw_accel_available": true,
+    "detected_encoders": [
+      "h264_qsv",
+      "libx264"
+    ],
+    "max_concurrent_renders": 4
+  },
+  "stages": [
+    {
+      "stage_id": "ingest_probe_proxy",
+      "stage_name": "FFprobe & 720p Proxy Generation",
+      "duration_seconds": 4.315,
+      "throughput_label": "4 HD clips in 4.32s (0.93 clips/s)",
+      "cpu_percent_avg": 2.5,
+      "memory_rss_mb": 67.4,
+      "notes": "3x 1920x1080 + 1x 1080x1920 -> 720p proxies (h264_qsv)"
+    },
+    {
+      "stage_id": "cv_scene_analysis",
+      "stage_name": "OpenCV CV Scoring & PySceneDetect",
+      "duration_seconds": 84.654,
+      "throughput_label": "0.05 clips/s (5 scenes)",
+      "cpu_percent_avg": 131.8,
+      "memory_rss_mb": 143.4,
+      "notes": "Mean quality score 79.9/100 across 1080p footage"
+    },
+    {
+      "stage_id": "librosa_beat_sync",
+      "stage_name": "Librosa Tempo & Beat Tracking",
+      "duration_seconds": 3.776,
+      "throughput_label": "4.24x realtime (60.1 BPM)",
+      "cpu_percent_avg": 75.2,
+      "memory_rss_mb": 296.0,
+      "notes": "15 beats detected on 16.0s track"
+    },
+    {
+      "stage_id": "render_1080p_cold",
+      "stage_name": "Cold 1080p Multi-Clip MP4 Render",
+      "duration_seconds": 19.401,
+      "throughput_label": "0.49x realtime (9.6s @ 1920x1080)",
+      "cpu_percent_avg": 0.9,
+      "memory_rss_mb": 296.2,
+      "notes": "Encoder: h264_qsv; LUT + ASS captions + xfade + loudnorm"
+    },
+    {
+      "stage_id": "render_1080p_warm_partial",
+      "stage_name": "Warm Partial-Cache Re-Render",
+      "duration_seconds": 7.633,
+      "throughput_label": "60.7% faster (2/3 cached)",
+      "cpu_percent_avg": 0.8,
+      "memory_rss_mb": 296.5,
+      "notes": "SHA-256 segment cache reuses untouched 1080p clips"
+    },
+    {
+      "stage_id": "render_vertical_9_16",
+      "stage_name": "Vertical 9:16 (1080x1920) Reel Export",
+      "duration_seconds": 2.311,
+      "throughput_label": "1.51x realtime (1080x1920)",
+      "cpu_percent_avg": 0.0,
+      "memory_rss_mb": 296.6,
+      "notes": "Teal & Orange grade + portrait crop/scale"
+    }
+  ],
+  "cold_render_seconds": 19.401,
+  "warm_cached_render_seconds": 7.633,
+  "cache_speedup_percent": 60.7,
+  "segment_cache_hits": 2,
+  "segment_cache_misses": 1,
+  "output_duration_seconds": 9.6,
+  "realtime_speedup_x": 0.49,
+  "portrait_render_seconds": 2.311,
+  "output_file_bytes": 3821124
+}

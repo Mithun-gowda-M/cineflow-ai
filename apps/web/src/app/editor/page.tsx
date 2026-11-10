@@ -1,6 +1,7 @@
 "use client";
 
-import React, { useState, useEffect, useRef } from "react";
+import React, { Suspense, useState, useEffect, useRef } from "react";
+import { useSearchParams } from "next/navigation";
 import { EditorHeader } from "@/components/editor/EditorHeader";
 import { MediaLibraryDrawer } from "@/components/editor/MediaLibraryDrawer";
 import { VideoPreviewCanvas } from "@/components/editor/VideoPreviewCanvas";
@@ -26,6 +27,7 @@ import {
   beatSyncTimeline,
   checkBackendHealth,
   editTimelineConversationally,
+  fetchBackendProject,
   generateDirectorPlan,
   getAudioAnalysis,
   listMediaAssets,
@@ -42,7 +44,10 @@ interface TimelineSnapshot {
   totalDuration: number;
 }
 
-export default function EditorStudioPage() {
+function EditorStudioContent() {
+  const searchParams = useSearchParams();
+  const projectIdParam = searchParams.get("projectId");
+  const [activeProjectId, setActiveProjectId] = useState<string>(projectIdParam || "proj_studio_01");
   const [projectTitle, setProjectTitle] = useState("Deepavali 2026 Festival Highlights");
   const [aspectRatio, setAspectRatio] = useState<AspectRatio>("16:9");
   const [colorGrade, setColorGrade] = useState<ColorGradePreset>("golden_hour");
@@ -425,7 +430,7 @@ export default function EditorStudioPage() {
         if (hasVisual) {
           const assetById = new Map(backendAssets.map((a) => [a.id, a]));
           const plan = await generateDirectorPlan({
-            projectId: "proj_studio_01",
+            projectId: activeProjectId,
             instruction,
             styleRecipeId: activeStyleRecipe?.id,
           });
@@ -503,7 +508,7 @@ export default function EditorStudioPage() {
         const backendAssets = await listMediaAssets();
         const assetById = new Map(backendAssets.map((a) => [a.id, a]));
         const editRes = await editTimelineConversationally({
-          projectId: "proj_studio_01",
+          projectId: activeProjectId,
           instruction,
           title: projectTitle,
           aspectRatio,
@@ -629,6 +634,47 @@ export default function EditorStudioPage() {
     };
   }, [clips, audioAnalysis]);
 
+  // Hydrate persisted backend project (e.g. ?projectId=proj_bmsit_showcase_2026 from Showcase or Dashboard)
+  useEffect(() => {
+    if (!projectIdParam) return;
+    let cancelled = false;
+    setActiveProjectId(projectIdParam);
+
+    Promise.all([fetchBackendProject(projectIdParam), listMediaAssets()])
+      .then(([proj, backendAssets]) => {
+        if (cancelled) return;
+        const assetById = new Map(backendAssets.map((a) => [a.id, a]));
+        setProjectTitle(proj.title);
+        setAspectRatio(proj.aspect_ratio);
+        setColorGrade(proj.color_grade);
+        setTotalDuration(Math.max(5.0, proj.target_duration_seconds));
+
+        if (proj.timeline) {
+          const snap = hydrateTimelineSnapshot(proj.timeline, assetById);
+          setClips(snap.clips);
+          setSubtitles(snap.subtitles);
+          setColorGrade(snap.colorGrade);
+          setAspectRatio(snap.aspectRatio);
+          setCinematicEffects(snap.cinematicEffects);
+          setTotalDuration(snap.totalDuration);
+          setHistory([]);
+          setRedoStack([]);
+          if (snap.clips.length > 0) setSelectedClipId(snap.clips[0].id);
+          setEditDiffChanges([`Hydrated live project '${proj.title}' (${snap.clips.length} tracks/clips)`]);
+        }
+      })
+      .catch((err) => {
+        if (!cancelled) {
+          setDirectorError(err instanceof Error ? err.message : "Failed to load project from backend.");
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [projectIdParam]);
+
   const primaryAudioSourceId = clips.find((c) => c.trackId === "a2" && Boolean(c.sourceId))?.sourceId;
 
   const handleSnapToBeats = async () => {
@@ -637,7 +683,7 @@ export default function EditorStudioPage() {
     setBeatSyncMessage("");
     try {
       const synced = await beatSyncTimeline({
-        projectId: "proj_studio_01",
+        projectId: activeProjectId,
         title: projectTitle,
         aspectRatio,
         colorGrade,
@@ -702,7 +748,7 @@ export default function EditorStudioPage() {
         const assetById = new Map(backendAssets.map((a) => [a.id, a]));
         const applied = await applyStyleRecipe({
           recipeId: recipe.id,
-          projectId: "proj_studio_01",
+          projectId: activeProjectId,
           title: projectTitle,
           aspectRatio,
           colorGrade,
@@ -856,6 +902,20 @@ export default function EditorStudioPage() {
         onSelectForDirector={(recipe) => setActiveStyleRecipe(recipe)}
       />
     </div>
+  );
+}
+
+export default function EditorStudioPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="h-screen w-screen flex items-center justify-center bg-cine-black text-cine-gold-400 text-sm">
+          Loading CINEFLOW Studio Workspace...
+        </div>
+      }
+    >
+      <EditorStudioContent />
+    </Suspense>
   );
 }
 

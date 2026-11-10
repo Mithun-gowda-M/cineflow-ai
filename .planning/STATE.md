@@ -1,7 +1,7 @@
 # PROJECT STATE: CINEFLOW AI
 
-> **Current Phase:** Phase 8 (Institutional Campus Deployment & Security) — COMPLETED  
-> **Next Phase:** Phase 9 (Hackathon Presentation & Demonstration Package) — PLANNED & READY FOR EXECUTION  
+> **Current Phase:** Phase 9 (Hackathon Presentation & Demonstration Package) — COMPLETED  
+> **Next Phase:** Milestone 1.0 Complete — Ready for Hackathon Pitch & BMSIT Club Handover  
 > **Last Updated:** 2026-11-10
 
 ---
@@ -19,7 +19,7 @@
 | **Phase 6** | Voice & Conversational Editing | **COMPLETED** | 2026-11-10 |
 | **Phase 7** | Trend Intelligence (Optional Style Recipes) | **COMPLETED** | 2026-11-10 |
 | **Phase 8** | Institutional Campus Deployment & Security | **COMPLETED** | 2026-11-10 |
-| **Phase 9** | Hackathon Presentation & Demonstration Package | **PLANNED & READY FOR EXECUTION** | 2026-11-10 |
+| **Phase 9** | Hackathon Presentation & Demonstration Package | **COMPLETED** | 2026-11-10 |
 
 ---
 
@@ -45,7 +45,7 @@
 
 ---
 
-## 4. Immediate Next Actions (Phase 9)
-1. Execute Phase 9 (`/gsd-execute-phase 9`) to run real hardware benchmarks, build the committed HD sample media pack + 1-click Showcase seeder, author architecture/API/cost/pitch collateral, and build the `/showcase` Presentation Hub & `/editor?projectId=` deep hydration.
-2. Verify all unit/integration tests and Next.js production build cleanly.
+## 4. Immediate Next Actions (Release 1.0 Verification & Demo)
+1. Start FastAPI backend (`uvicorn backend.api.main:app --port 8000`) and Next.js Studio (`npm --prefix apps/web run dev`) to present [`/showcase`](http://127.0.0.1:3000/showcase) and [`/editor?projectId=proj_bmsit_showcase_2026`](http://127.0.0.1:3000/editor?projectId=proj_bmsit_showcase_2026).
+2. Follow [`docs/pitch/HACKATHON_PITCH_DECK.md`](docs/pitch/HACKATHON_PITCH_DECK.md) and [`docs/handover/BMSIT_CLUB_HANDOVER.md`](docs/handover/BMSIT_CLUB_HANDOVER.md) for live hackathon judging and BMSIT technical club transition.
 

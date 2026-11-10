@@ -1016,3 +1016,127 @@ export async function getAdminMigrationStatus(): Promise<BackendMigrationStatus>
   return (await res.json()) as BackendMigrationStatus;
 }
 
+// ---- Phase 9: Showcase & Live Benchmarks ----
+
+export interface BackendProjectDetail {
+  id: string;
+  owner_id?: string | null;
+  title: string;
+  description: string;
+  aspect_ratio: AspectRatio;
+  target_duration_seconds: number;
+  color_grade: ColorGradePreset;
+  timeline: BackendDirectorPlanResponse["timeline"] | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface BackendBenchmarkStageResult {
+  stage_id: string;
+  stage_name: string;
+  duration_seconds: number;
+  throughput_label: string;
+  cpu_percent_avg: number;
+  memory_rss_mb: number;
+  notes: string;
+}
+
+export interface BackendBenchmarkReport {
+  generated_at: string;
+  host_os: string;
+  python_version: string;
+  cpu_cores: number;
+  ram_total_gb: number;
+  ffmpeg_version: string;
+  hardware_profile: {
+    profile: "low" | "medium" | "high";
+    cpu_cores: number;
+    free_disk_gb: number;
+    video_encoder: string;
+    hw_accel_available: boolean;
+    detected_encoders: string[];
+    max_concurrent_renders: number;
+  };
+  stages: BackendBenchmarkStageResult[];
+  cold_render_seconds: number;
+  warm_cached_render_seconds: number;
+  cache_speedup_percent: number;
+  segment_cache_hits: number;
+  segment_cache_misses: number;
+  output_duration_seconds: number;
+  realtime_speedup_x: number;
+  portrait_render_seconds: number;
+  output_file_bytes: number;
+}
+
+export interface BackendShowcaseSampleFileInfo {
+  filename: string;
+  media_kind: "video" | "image" | "audio";
+  size_bytes: number;
+  resolution_label: string;
+  duration_seconds: number;
+  role: string;
+}
+
+export interface BackendShowcaseStatus {
+  showcase_project_id: string;
+  project_loaded: boolean;
+  sample_pack_ready: boolean;
+  sample_files: BackendShowcaseSampleFileInfo[];
+  total_sample_bytes: number;
+  benchmark_report_ready: boolean;
+  last_benchmark_at?: string | null;
+  hardware: BackendBenchmarkReport["hardware_profile"];
+}
+
+export interface BackendShowcaseLoadResponse {
+  project: BackendProjectDetail;
+  assets: BackendMediaAsset[];
+  audio_asset_id?: string | null;
+  newly_ingested: boolean;
+  total_sample_bytes: number;
+  message: string;
+}
+
+export async function fetchBackendProject(projectId: string): Promise<BackendProjectDetail> {
+  const res = await fetch(`${API_BASE_URL}/projects/${encodeURIComponent(projectId)}`, {
+    headers: getAuthHeaders(),
+  });
+  if (!res.ok) throw new Error(`Failed to fetch project '${projectId}' (${res.status})`);
+  return (await res.json()) as BackendProjectDetail;
+}
+
+export async function fetchShowcaseStatus(): Promise<BackendShowcaseStatus> {
+  const res = await fetch(`${API_BASE_URL}/showcase/status`, { headers: getAuthHeaders() });
+  if (!res.ok) throw new Error(`Failed to fetch showcase status (${res.status})`);
+  return (await res.json()) as BackendShowcaseStatus;
+}
+
+export async function loadShowcaseProject(forceReset = false): Promise<BackendShowcaseLoadResponse> {
+  const res = await fetch(`${API_BASE_URL}/showcase/load`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...getAuthHeaders() },
+    body: JSON.stringify({ force_reset: forceReset }),
+  });
+  if (!res.ok) {
+    const errBody = await res.json().catch(() => ({ detail: res.statusText }));
+    throw new Error(errBody.detail || `Failed to load HD showcase (${res.status})`);
+  }
+  return (await res.json()) as BackendShowcaseLoadResponse;
+}
+
+export async function fetchShowcaseBenchmarks(): Promise<BackendBenchmarkReport> {
+  const res = await fetch(`${API_BASE_URL}/showcase/benchmarks`);
+  if (!res.ok) throw new Error(`Failed to load benchmarks (${res.status})`);
+  return (await res.json()) as BackendBenchmarkReport;
+}
+
+export async function runShowcaseBenchmarks(): Promise<BackendBenchmarkReport> {
+  const res = await fetch(`${API_BASE_URL}/showcase/benchmarks/run`, { method: "POST" });
+  if (!res.ok) {
+    const errBody = await res.json().catch(() => ({ detail: res.statusText }));
+    throw new Error(errBody.detail || `Benchmark run failed (${res.status})`);
+  }
+  return (await res.json()) as BackendBenchmarkReport;
+}
+

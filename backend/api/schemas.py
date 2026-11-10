@@ -646,3 +646,69 @@ class MigrationStatusResponse(BaseModel):
     table_counts: dict[str, int]
     postgres_migration_cli: str = "backend\\.venv\\Scripts\\python.exe -m backend.migrations.sqlite_to_postgres --dry-run"
 
+
+# ---- Phase 9: Benchmarking & Hackathon Showcase Schemas ----
+
+
+class BenchmarkStageResult(BaseModel):
+    stage_id: str
+    stage_name: str
+    duration_seconds: float
+    throughput_label: str
+    cpu_percent_avg: float = 0.0
+    memory_rss_mb: float = 0.0
+    notes: str = ""
+
+
+class ShowcaseBenchmarkReport(BaseModel):
+    generated_at: str = Field(default_factory=utc_now_iso)
+    host_os: str
+    python_version: str
+    cpu_cores: int
+    ram_total_gb: float
+    ffmpeg_version: str
+    hardware_profile: HardwareProfileInfo
+    stages: list[BenchmarkStageResult]
+    cold_render_seconds: float
+    warm_cached_render_seconds: float
+    cache_speedup_percent: float
+    segment_cache_hits: int
+    segment_cache_misses: int
+    output_duration_seconds: float
+    realtime_speedup_x: float
+    portrait_render_seconds: float
+    output_file_bytes: int
+
+
+class ShowcaseSampleFileInfo(BaseModel):
+    filename: str
+    media_kind: Literal["video", "image", "audio"]
+    size_bytes: int
+    resolution_label: str
+    duration_seconds: float
+    role: str
+
+
+class ShowcaseStatusResponse(BaseModel):
+    showcase_project_id: str
+    project_loaded: bool
+    sample_pack_ready: bool
+    sample_files: list[ShowcaseSampleFileInfo]
+    total_sample_bytes: int
+    benchmark_report_ready: bool
+    last_benchmark_at: Optional[str] = None
+    hardware: HardwareProfileInfo
+
+
+class ShowcaseLoadRequest(BaseModel):
+    force_reset: bool = False
+
+
+class ShowcaseLoadResponse(BaseModel):
+    project: ProjectResponse
+    assets: list[MediaAsset]
+    audio_asset_id: Optional[str] = None
+    newly_ingested: bool
+    total_sample_bytes: int
+    message: str
+

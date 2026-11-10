@@ -7,7 +7,14 @@ import { VideoPreviewCanvas } from "@/components/editor/VideoPreviewCanvas";
 import { AiDirectorDrawer } from "@/components/editor/AiDirectorDrawer";
 import { MultiTrackTimeline } from "@/components/editor/MultiTrackTimeline";
 import { ExportModal } from "@/components/editor/ExportModal";
-import { AspectRatio, ColorGradePreset, TimelineClip, SubtitleCue } from "@/types";
+import { AspectRatio, ColorGradePreset, TimelineClip, SubtitleCue, TransitionType } from "@/types";
+import {
+  BackendStoryboardBeat,
+  checkBackendHealth,
+  generateDirectorPlan,
+  listMediaAssets,
+  resolveBackendUrl,
+} from "@/lib/api";
 
 export default function EditorStudioPage() {
   const [projectTitle, setProjectTitle] = useState("Deepavali 2026 Festival Highlights");
@@ -21,6 +28,11 @@ export default function EditorStudioPage() {
   const [isMediaDrawerCollapsed, setIsMediaDrawerCollapsed] = useState<boolean>(false);
   const [isAiDrawerCollapsed, setIsAiDrawerCollapsed] = useState<boolean>(false);
   const [isExportModalOpen, setIsExportModalOpen] = useState<boolean>(false);
+
+  const [storyboard, setStoryboard] = useState<BackendStoryboardBeat[]>([]);
+  const [directorEngine, setDirectorEngine] = useState<"ollama" | "rule_fallback" | "demo" | null>(null);
+  const [directorWarnings, setDirectorWarnings] = useState<string[]>([]);
+  const [directorError, setDirectorError] = useState<string>("");
 
   // Initial timeline clips (realistic demo project data)
   const [clips, setClips] = useState<TimelineClip[]>([
@@ -252,11 +264,94 @@ export default function EditorStudioPage() {
     setSelectedClipId(newClip.id);
   };
 
-  // AI Directing Engine callback
-  const handleApplyAiPlan = (instruction: string) => {
-    const lower = instruction.toLowerCase();
+  // AI Directing Engine callback (real FastAPI planner when media & backend are ready, else local demo adjustment)
+  const handleApplyAiPlan = async (instruction: string) => {
+    setDirectorError("");
+    const health = await checkBackendHealth();
+    if (health) {
+      try {
+        const backendAssets = await listMediaAssets();
+        const hasVisual = backendAssets.some((a) => a.media_kind === "video" || a.media_kind === "image");
+        if (hasVisual) {
+          const assetById = new Map(backendAssets.map((a) => [a.id, a]));
+          const plan = await generateDirectorPlan({
+            projectId: "proj_studio_01",
+            instruction,
+          });
 
-    // 1. Color Grading Detection
+          const nextClips: TimelineClip[] = plan.timeline.video_clips.map((vc) => {
+            const asset = assetById.get(vc.source_id);
+            return {
+              id: vc.clip_id,
+              sourceId: vc.source_id,
+              mediaKind: asset?.media_kind || "video",
+              title: vc.source_filename || asset?.original_filename || vc.source_id,
+              sourceUrl: resolveBackendUrl(vc.source_url || asset?.source_url),
+              proxyUrl: resolveBackendUrl(asset?.proxy_url),
+              thumbnailUrl:
+                resolveBackendUrl(vc.thumbnail_url || asset?.thumbnail_url) ||
+                "https://images.unsplash.com/photo-1514565131-fce0801e5785?auto=format&fit=crop&w=400&q=80",
+              trackId: "v1",
+              startTime: vc.timeline_start_seconds,
+              duration: vc.duration_seconds,
+              trimStart: vc.start_time_seconds,
+              trimEnd: vc.end_time_seconds,
+              speed: vc.playback_speed,
+              transition: (vc.transition_in?.type as TransitionType) || "crossfade",
+              qualityScore: vc.quality_score ?? 85,
+              tags: vc.tags,
+            };
+          });
+
+          for (const ac of plan.timeline.audio_tracks) {
+            const asset = assetById.get(ac.source_id);
+            nextClips.push({
+              id: ac.id,
+              sourceId: ac.source_id,
+              mediaKind: "audio",
+              title: ac.name,
+              sourceUrl: resolveBackendUrl(ac.source_url || asset?.source_url),
+              thumbnailUrl: "",
+              trackId: "a2",
+              startTime: ac.timeline_start_seconds,
+              duration: ac.duration_seconds,
+              trimStart: ac.start_time_seconds,
+              trimEnd: ac.start_time_seconds + ac.duration_seconds,
+              speed: 1.0,
+              transition: "none",
+              qualityScore: 95,
+              tags: ["Audio"],
+            });
+          }
+
+          const nextSubs: SubtitleCue[] = plan.timeline.subtitles.map((s) => ({
+            id: s.id,
+            startTime: s.start_seconds,
+            duration: Math.max(0.5, s.end_seconds - s.start_seconds),
+            text: s.text,
+            style: s.style === "bold_center_reel" ? "bold_center_reel" : "cinematic_gold_bottom",
+          }));
+
+          pushHistorySnapshot(nextClips);
+          setSubtitles(nextSubs);
+          setProjectTitle(plan.timeline.title);
+          setAspectRatio(plan.timeline.aspect_ratio);
+          setColorGrade(plan.timeline.color_grade);
+          setTotalDuration(Math.max(5.0, plan.timeline.target_duration_seconds));
+          setStoryboard(plan.storyboard);
+          setDirectorEngine(plan.engine_used);
+          setDirectorWarnings(plan.warnings);
+          if (nextClips.length > 0) setSelectedClipId(nextClips[0].id);
+          return;
+        }
+      } catch (err) {
+        setDirectorError(err instanceof Error ? err.message : "AI Director request failed.");
+        return;
+      }
+    }
+
+    // Demo fallback when working with placeholder demo clips or offline backend
+    const lower = instruction.toLowerCase();
     if (lower.includes("golden") || lower.includes("warm")) {
       setColorGrade("golden_hour");
     } else if (lower.includes("teal") || lower.includes("contrast") || lower.includes("cinema")) {
@@ -265,14 +360,12 @@ export default function EditorStudioPage() {
       setColorGrade("moody_dark");
     }
 
-    // 2. Aspect Ratio Detection
     if (lower.includes("9:16") || lower.includes("reel") || lower.includes("shorts") || lower.includes("vertical")) {
       setAspectRatio("9:16");
     } else if (lower.includes("16:9") || lower.includes("landscape") || lower.includes("youtube")) {
       setAspectRatio("16:9");
     }
 
-    // 3. Pacing & Speed Alterations
     let updated = [...clips];
     if (lower.includes("fast") || lower.includes("speed up") || lower.includes("energy")) {
       updated = updated.map((c) => ({
@@ -287,7 +380,6 @@ export default function EditorStudioPage() {
       }));
     }
 
-    // Recalculate start times sequentially for V1
     let v1Time = 0.0;
     updated = updated.map((c) => {
       if (c.trackId === "v1") {
@@ -300,6 +392,8 @@ export default function EditorStudioPage() {
 
     pushHistorySnapshot(updated);
     setTotalDuration(Math.max(30.0, v1Time));
+    setDirectorEngine("demo");
+    setDirectorWarnings(["Demo mode active: upload footage in Media Hub to run full AI storyboarding."]);
   };
 
   return (
@@ -351,6 +445,10 @@ export default function EditorStudioPage() {
           onToggleCollapse={() => setIsAiDrawerCollapsed(!isAiDrawerCollapsed)}
           globalColorGrade={colorGrade}
           onUpdateGlobalColorGrade={setColorGrade}
+          storyboard={storyboard}
+          directorEngine={directorEngine}
+          directorWarnings={directorWarnings}
+          directorError={directorError}
         />
       </div>
 

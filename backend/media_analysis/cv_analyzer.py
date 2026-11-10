@@ -332,3 +332,4 @@ def analyze_video_segment(
         )
     finally:
         cap.release()
+

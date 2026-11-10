@@ -1,23 +1,38 @@
 "use client";
 
 import React, { useState } from "react";
-import { 
-  Sparkles, Mic, MicOff, Send, Sliders, Scissors, 
-  Trash2, ChevronLeft, ChevronRight, Wand2, RefreshCw 
+import {
+  Sparkles,
+  Mic,
+  MicOff,
+  Send,
+  Sliders,
+  Scissors,
+  Trash2,
+  ChevronLeft,
+  ChevronRight,
+  RefreshCw,
+  AlertCircle,
+  Film,
 } from "lucide-react";
 import { GoldButton } from "@/components/ui/GoldButton";
 import { Badge } from "@/components/ui/Badge";
 import { TimelineClip, TransitionType, ColorGradePreset } from "@/types";
+import { BackendStoryboardBeat } from "@/lib/api";
 
 interface AiDirectorDrawerProps {
   selectedClip: TimelineClip | null;
   onUpdateClip: (clipId: string, updates: Partial<TimelineClip>) => void;
   onDeleteClip: (clipId: string) => void;
-  onApplyAiPlan: (instruction: string) => void;
+  onApplyAiPlan: (instruction: string) => Promise<void> | void;
   isCollapsed: boolean;
   onToggleCollapse: () => void;
   globalColorGrade: ColorGradePreset;
   onUpdateGlobalColorGrade: (grade: ColorGradePreset) => void;
+  storyboard?: BackendStoryboardBeat[];
+  directorEngine?: "ollama" | "rule_fallback" | "demo" | null;
+  directorWarnings?: string[];
+  directorError?: string;
 }
 
 export const AiDirectorDrawer: React.FC<AiDirectorDrawerProps> = ({
@@ -29,21 +44,26 @@ export const AiDirectorDrawer: React.FC<AiDirectorDrawerProps> = ({
   onToggleCollapse,
   globalColorGrade,
   onUpdateGlobalColorGrade,
+  storyboard = [],
+  directorEngine = null,
+  directorWarnings = [],
+  directorError = "",
 }) => {
   const [prompt, setPrompt] = useState("");
   const [isListening, setIsListening] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
 
-  const handleSendPrompt = (textToSend?: string) => {
+  const handleSendPrompt = async (textToSend?: string) => {
     const text = textToSend || prompt;
     if (!text.trim()) return;
 
     setIsProcessing(true);
-    setTimeout(() => {
-      onApplyAiPlan(text);
-      setIsProcessing(false);
+    try {
+      await onApplyAiPlan(text);
       setPrompt("");
-    }, 600);
+    } finally {
+      setIsProcessing(false);
+    }
   };
 
   const toggleVoiceListen = () => {
@@ -51,11 +71,10 @@ export const AiDirectorDrawer: React.FC<AiDirectorDrawerProps> = ({
       setIsListening(false);
     } else {
       setIsListening(true);
-      // Simulate speech-to-text transcription
       setTimeout(() => {
-        setPrompt("Make cuts faster and apply Golden Hour grading");
+        setPrompt("Create a two-minute cinematic Deepavali video with slow dramatic intro and fast transitions during fireworks");
         setIsListening(false);
-      }, 2500);
+      }, 2200);
     }
   };
 
@@ -93,7 +112,13 @@ export const AiDirectorDrawer: React.FC<AiDirectorDrawerProps> = ({
       <div className="p-3 border-b border-cine-border space-y-3 bg-cine-black/40">
         <div className="flex items-center justify-between text-[11px] text-gray-400">
           <span>Creative Instructions</span>
-          <span className="text-purple-400 font-mono">Llama 3.2 + Heuristic</span>
+          <span className="text-purple-400 font-mono">
+            {directorEngine === "ollama"
+              ? "Ollama LLM"
+              : directorEngine === "rule_fallback"
+              ? "4-Act Rule Engine"
+              : "Ollama + Heuristic"}
+          </span>
         </div>
 
         <div className="relative">
@@ -101,7 +126,7 @@ export const AiDirectorDrawer: React.FC<AiDirectorDrawerProps> = ({
             rows={3}
             value={prompt}
             onChange={(e) => setPrompt(e.target.value)}
-            placeholder="e.g. Snap cuts to the drum drops and slow down the fireworks..."
+            placeholder="e.g. Create a two-minute Deepavali film with slow dramatic intro and fast fireworks cuts..."
             className="w-full p-2.5 rounded-lg bg-cine-black border border-cine-border text-xs text-white placeholder-gray-500 focus:outline-none focus:border-cine-gold-500 resize-none font-sans"
           />
           {isListening && (
@@ -112,7 +137,6 @@ export const AiDirectorDrawer: React.FC<AiDirectorDrawerProps> = ({
         </div>
 
         <div className="flex items-center justify-between gap-2">
-          {/* Voice Microphone Button */}
           <button
             onClick={toggleVoiceListen}
             className={`p-2 rounded-lg border text-xs flex items-center gap-1.5 transition-all ${
@@ -126,25 +150,45 @@ export const AiDirectorDrawer: React.FC<AiDirectorDrawerProps> = ({
             <span className="text-[11px]">{isListening ? "Listening" : "Voice"}</span>
           </button>
 
-          {/* Send / Apply Prompt */}
           <GoldButton
             size="sm"
             onClick={() => handleSendPrompt()}
             disabled={isProcessing || !prompt.trim()}
-            icon={isProcessing ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
+            icon={
+              isProcessing ? (
+                <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+              ) : (
+                <Send className="w-3.5 h-3.5" />
+              )
+            }
           >
-            {isProcessing ? "Re-Planning..." : "Direct Cut"}
+            {isProcessing ? "Directing..." : "Direct Cut"}
           </GoldButton>
         </div>
+
+        {directorError && (
+          <div className="p-2 rounded bg-red-500/10 border border-red-500/30 text-[11px] text-red-300 flex items-start gap-1.5">
+            <AlertCircle className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+            <span>{directorError}</span>
+          </div>
+        )}
+
+        {directorWarnings.length > 0 && (
+          <div className="p-2 rounded bg-amber-500/10 border border-amber-500/30 text-[10px] text-amber-300 space-y-1">
+            {directorWarnings.map((w, i) => (
+              <p key={i}>• {w}</p>
+            ))}
+          </div>
+        )}
 
         {/* Quick Recipe Chips */}
         <div className="space-y-1.5 pt-1">
           <span className="text-[10px] text-gray-500 uppercase font-semibold">Quick Directing Recipes:</span>
           <div className="flex flex-col gap-1.5">
             {[
-              "Golden hour grading + slow dramatic intro",
-              "Fast cuts on drum drops + 9:16 vertical conforming",
-              "Subtle crossfades + emotional ending deceleration",
+              "Create a 2-minute Deepavali film with slow dramatic intro and fast fireworks",
+              "Fast 9:16 vertical Reel with energetic cuts",
+              "Professional travel film with emotional ending",
             ].map((recipe, idx) => (
               <button
                 key={idx}
@@ -157,6 +201,37 @@ export const AiDirectorDrawer: React.FC<AiDirectorDrawerProps> = ({
           </div>
         </div>
       </div>
+
+      {/* Generated Storyboard Readout */}
+      {storyboard.length > 0 && (
+        <div className="p-3 border-b border-cine-border space-y-2 bg-cine-surface/60">
+          <div className="flex items-center justify-between text-xs font-semibold text-white">
+            <span className="flex items-center gap-1.5">
+              <Film className="w-3.5 h-3.5 text-cine-cyan-400" /> AI Storyboard ({storyboard.length})
+            </span>
+            <Badge variant="gold" size="sm">
+              {directorEngine === "ollama" ? "LLM" : "Rule Engine"}
+            </Badge>
+          </div>
+          <div className="space-y-1.5 max-h-44 overflow-y-auto pr-1">
+            {storyboard.map((beat) => (
+              <div
+                key={beat.beat_index}
+                className="p-2 rounded bg-cine-black/60 border border-cine-border/60 text-[10px] space-y-0.5"
+              >
+                <div className="flex items-center justify-between">
+                  <span className="font-bold text-cine-gold-400">{beat.act}</span>
+                  <span className="font-mono text-gray-400">
+                    {beat.duration_seconds.toFixed(1)}s @ {beat.playback_speed}x
+                  </span>
+                </div>
+                <p className="text-white font-medium truncate">{beat.title}</p>
+                <p className="text-gray-400 leading-tight">{beat.rationale}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Global Color Grade Selector */}
       <div className="p-3 border-b border-cine-border space-y-2">
@@ -212,7 +287,6 @@ export const AiDirectorDrawer: React.FC<AiDirectorDrawerProps> = ({
               <p className="text-xs font-bold text-white truncate">{selectedClip.title}</p>
             </div>
 
-            {/* Playback Speed Ramp */}
             <div>
               <div className="flex items-center justify-between text-xs text-gray-300 mb-1">
                 <span>Speed Ramp:</span>
@@ -229,7 +303,6 @@ export const AiDirectorDrawer: React.FC<AiDirectorDrawerProps> = ({
               />
             </div>
 
-            {/* Transition Selector */}
             <div>
               <label className="text-xs text-gray-300 block mb-1">Transition</label>
               <select
@@ -246,7 +319,6 @@ export const AiDirectorDrawer: React.FC<AiDirectorDrawerProps> = ({
               </select>
             </div>
 
-            {/* Delete Clip */}
             <div className="pt-2">
               <button
                 onClick={() => onDeleteClip(selectedClip.id)}
@@ -265,4 +337,3 @@ export const AiDirectorDrawer: React.FC<AiDirectorDrawerProps> = ({
     </aside>
   );
 };
-

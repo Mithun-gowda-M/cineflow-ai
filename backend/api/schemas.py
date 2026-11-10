@@ -259,3 +259,61 @@ class HealthResponse(BaseModel):
     hardware: HardwareProfileInfo
     timestamp: str = Field(default_factory=utc_now_iso)
 
+
+# ---- Phase 4: AI Director & Storyboard Schemas ----
+
+StoryAct = Literal["Opening Hook", "Rising Action", "Climax", "Emotional Resolution"]
+PacingStyle = Literal["dynamic_arc", "fast", "slow"]
+
+
+class DirectorIntent(BaseModel):
+    mood: str = "cinematic"
+    theme_keywords: list[str] = Field(default_factory=list)
+    target_duration_seconds: float = Field(default=60.0, gt=0.0, le=3600.0)
+    aspect_ratio: AspectRatio = "16:9"
+    color_grade: ColorGradePreset = "golden_hour"
+    pacing: PacingStyle = "dynamic_arc"
+    intro_style: Literal["slow_dramatic", "punchy_hook", "standard"] = "standard"
+    climax_keywords: list[str] = Field(default_factory=list)
+    outro_style: Literal["emotional", "upbeat", "standard"] = "standard"
+    title_suggestion: str = "Cinematic Story"
+
+
+class StoryboardBeat(BaseModel):
+    beat_index: int
+    act: StoryAct
+    clip_id: str
+    source_id: str
+    title: str
+    start_time_seconds: float = Field(ge=0.0)
+    end_time_seconds: float = Field(gt=0.0)
+    duration_seconds: float = Field(gt=0.0)
+    playback_speed: float = Field(default=1.0, ge=0.25, le=4.0)
+    transition_in: TransitionType = "crossfade"
+    rationale: str
+
+
+class DirectorPlanRequest(BaseModel):
+    project_id: str = Field(default="proj_ai_01", min_length=1, max_length=128)
+    instruction: str = Field(min_length=3, max_length=2000)
+    media_ids: Optional[list[str]] = None
+    target_duration_seconds: Optional[float] = Field(default=None, gt=0.0, le=3600.0)
+    aspect_ratio: Optional[AspectRatio] = None
+    use_llm: bool = True
+
+
+class DirectorPlanResponse(BaseModel):
+    engine_used: Literal["ollama", "rule_fallback"]
+    intent: DirectorIntent
+    storyboard: list[StoryboardBeat]
+    timeline: TimelinePlan
+    warnings: list[str] = Field(default_factory=list)
+
+
+class DirectorStatusResponse(BaseModel):
+    ollama_available: bool
+    ollama_url: str
+    configured_model: str
+    available_models: list[str] = Field(default_factory=list)
+    fallback_ready: bool = True
+

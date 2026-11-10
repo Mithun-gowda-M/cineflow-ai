@@ -153,3 +153,4 @@ def test_multiscene_splitting_deduplication_and_search_api(isolated_env) -> None
     re_res = client.post(f"/api/v1/media/{sharp_asset['id']}/analyze")
     assert re_res.status_code == 200
     assert re_res.json()["analysis"]["quality"]["overall_score"] == sharp_asset["analysis"]["quality"]["overall_score"]
+

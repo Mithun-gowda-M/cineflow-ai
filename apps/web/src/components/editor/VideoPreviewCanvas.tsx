@@ -81,6 +81,7 @@ export const VideoPreviewCanvas: React.FC<VideoPreviewCanvasProps> = ({
     cinematic_teal_orange: "contrast(130%) saturate(125%) hue-rotate(15deg)",
     moody_dark: "contrast(125%) saturate(75%) brightness(85%)",
     vintage_film: "sepia(40%) contrast(110%) brightness(95%) grayscale(20%)",
+    high_contrast_bw: "grayscale(100%) contrast(135%)",
   };
 
   return (

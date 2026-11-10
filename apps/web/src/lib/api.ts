@@ -265,3 +265,95 @@ export function getRenderDownloadUrl(jobId: string): string {
   return `${API_BASE_URL}/render/${encodeURIComponent(jobId)}/download`;
 }
 
+export interface BackendStoryboardBeat {
+  beat_index: number;
+  act: "Opening Hook" | "Rising Action" | "Climax" | "Emotional Resolution";
+  clip_id: string;
+  source_id: string;
+  title: string;
+  start_time_seconds: number;
+  end_time_seconds: number;
+  duration_seconds: number;
+  playback_speed: number;
+  transition_in: string;
+  rationale: string;
+}
+
+export interface BackendDirectorPlanResponse {
+  engine_used: "ollama" | "rule_fallback";
+  intent: {
+    mood: string;
+    theme_keywords: string[];
+    target_duration_seconds: number;
+    aspect_ratio: AspectRatio;
+    color_grade: ColorGradePreset;
+    pacing: string;
+    title_suggestion: string;
+  };
+  storyboard: BackendStoryboardBeat[];
+  timeline: {
+    project_id: string;
+    title: string;
+    aspect_ratio: AspectRatio;
+    target_duration_seconds: number;
+    fps: number;
+    color_grade: ColorGradePreset;
+    video_clips: {
+      clip_id: string;
+      source_id: string;
+      source_filename: string;
+      source_url: string;
+      thumbnail_url?: string | null;
+      start_time_seconds: number;
+      end_time_seconds: number;
+      timeline_start_seconds: number;
+      duration_seconds: number;
+      playback_speed: number;
+      transition_in?: { type: string; duration_seconds: number } | null;
+      quality_score?: number | null;
+      tags: string[];
+    }[];
+    audio_tracks: {
+      id: string;
+      name: string;
+      source_id: string;
+      source_url: string;
+      start_time_seconds: number;
+      timeline_start_seconds: number;
+      duration_seconds: number;
+    }[];
+    subtitles: {
+      id: string;
+      start_seconds: number;
+      end_seconds: number;
+      text: string;
+      style: "cinematic_gold_bottom" | "bold_center_reel" | "subtle_white";
+    }[];
+  };
+  warnings: string[];
+}
+
+export async function generateDirectorPlan(params: {
+  projectId: string;
+  instruction: string;
+  targetDurationSeconds?: number;
+  aspectRatio?: AspectRatio;
+}): Promise<BackendDirectorPlanResponse> {
+  const res = await fetch(`${API_BASE_URL}/director/plan`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      project_id: params.projectId,
+      instruction: params.instruction,
+      target_duration_seconds: params.targetDurationSeconds,
+      aspect_ratio: params.aspectRatio,
+      use_llm: true,
+    }),
+  });
+  if (!res.ok) {
+    const errBody = await res.json().catch(() => ({ detail: res.statusText }));
+    throw new Error(errBody.detail || `AI Director failed (${res.status})`);
+  }
+  return (await res.json()) as BackendDirectorPlanResponse;
+}
+

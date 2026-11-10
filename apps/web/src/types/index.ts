@@ -14,7 +14,8 @@ export type ColorGradePreset =
   | "cinematic_teal_orange"
   | "golden_hour"
   | "moody_dark"
-  | "vintage_film";
+  | "vintage_film"
+  | "high_contrast_bw";
 
 export interface TimelineClip {
   id: string;

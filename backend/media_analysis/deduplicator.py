@@ -86,3 +86,4 @@ def find_best_duplicate_match(
 
     similarity = round(((64 - best_dist) / 64.0) * 100.0, 1)
     return best_id, similarity
+

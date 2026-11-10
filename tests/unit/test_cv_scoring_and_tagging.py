@@ -103,3 +103,4 @@ def test_dhash_identifies_identical_vs_distinct_images() -> None:
 
     assert hamming_distance(h_a, h_copy) <= 4
     assert hamming_distance(h_a, h_b) >= 16
+

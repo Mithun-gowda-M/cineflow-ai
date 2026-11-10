@@ -100,3 +100,4 @@ def generate_semantic_tags(
         _add("High-FPS")
 
     return tags
+

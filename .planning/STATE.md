@@ -1,7 +1,7 @@
 # PROJECT STATE: CINEFLOW AI
 
-> **Current Phase:** Phase 3 (AI Media Intelligence & Scene Detection) — COMPLETED  
-> **Next Phase:** Phase 4 (AI Director & Storyboard Generator) — PLANNED  
+> **Current Phase:** Phase 4 (AI Director & Storyboard Generator) — COMPLETED  
+> **Next Phase:** Phase 5 (Advanced Cinematic Engine & Audio Intelligence) — READY TO PLAN  
 > **Last Updated:** 2026-11-10
 
 ---
@@ -14,8 +14,8 @@
 | **Phase 1** | Premium Frontend Design System & Workspaces | **COMPLETED** | 2026-11-09 |
 | **Phase 2** | Real Video Processing & Rendering Engine | **COMPLETED** | 2026-11-10 |
 | **Phase 3** | AI Media Intelligence & Scene Detection | **COMPLETED** | 2026-11-10 |
-| **Phase 4** | AI Director & Storyboard Generator | **PLANNED & READY FOR EXECUTION** | 2026-11-10 |
-| **Phase 5** | Advanced Cinematic Engine & Audio Intelligence | Queued | — |
+| **Phase 4** | AI Director & Storyboard Generator | **COMPLETED** | 2026-11-10 |
+| **Phase 5** | Advanced Cinematic Engine & Audio Intelligence | **READY TO PLAN** | — |
 | **Phase 6** | Voice & Conversational Editing | Queued | — |
 | **Phase 7** | Trend Intelligence (Optional Style Recipes) | Queued | — |
 | **Phase 8** | Institutional Campus Deployment & Security | Queued | — |
@@ -45,8 +45,8 @@
 
 ---
 
-## 4. Immediate Next Actions (Phase 4)
-1. Plan Phase 4 (`/gsd-plan-phase 4`) for AI Director & Storyboard Generator.
-2. Integrate local Ollama client (`llama3.2`/`mistral`) plus deterministic rule-based director fallback to parse creative instructions into structured, validated `TimelinePlan` JSONs.
-3. Build intelligent clip sequencer (narrative arc, quality weighting, duplicate exclusion, duration solver without artificial footage looping).
+## 4. Immediate Next Actions (Phase 5)
+1. Plan Phase 5 (`/gsd-plan-phase 5`) for Librosa audio beat detection, tempo sync cutting, speed ramps, animated typography (`drawtext`/ASS subtitles), and audio ducking/loudness normalization.
+2. Integrate Librosa (`librosa`, `soundfile`) into `backend/audio_engine/`.
+3. Wire beat-grid visualization and animated subtitle rendering into the Next.js timeline & FFmpeg export pipeline.
 

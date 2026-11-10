@@ -189,3 +189,4 @@ def search_and_rank_media(
 
     scored.sort(key=lambda pair: pair[0], reverse=True)
     return [asset for _, asset in scored]
+

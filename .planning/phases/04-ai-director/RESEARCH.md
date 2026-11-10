@@ -36,3 +36,4 @@ Language models are never trusted to execute shell commands or reference arbitra
 1. LLM receives only abstract asset/scene metadata (`id`, `tags`, `quality_score`, `duration_seconds`).
 2. LLM output is parsed as JSON and cross-checked against `Database` records.
 3. Invalid IDs, out-of-bounds trim timestamps, out-of-range speeds (`[0.25, 4.0]`), or duplicate intervals are clamped or rejected by `validate_and_sanitize_timeline(...)` before the `TimelinePlan` reaches the user or Phase 2 FFmpeg renderer.
+

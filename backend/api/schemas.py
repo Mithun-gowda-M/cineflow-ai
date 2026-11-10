@@ -57,6 +57,45 @@ class MediaMetadata(BaseModel):
     rotation: int = 0
 
 
+class QualityBreakdown(BaseModel):
+    sharpness_score: float = Field(ge=0.0, le=100.0)
+    exposure_score: float = Field(ge=0.0, le=100.0)
+    stability_score: float = Field(ge=0.0, le=100.0)
+    composition_score: float = Field(ge=0.0, le=100.0)
+    laplacian_variance: float = 0.0
+    mean_luminance: float = 0.0
+    motion_intensity: Literal["static", "smooth", "action", "shaky"] = "static"
+    lighting_mood: Literal["bright", "warm_golden", "balanced", "low_light"] = "balanced"
+    face_count: int = 0
+    subject_position: Literal["center", "rule_of_thirds", "wide", "none"] = "none"
+    dominant_colors: list[str] = Field(default_factory=list)
+    overall_score: float = Field(ge=0.0, le=100.0)
+    explanation: str = ""
+
+
+class DetectedScene(BaseModel):
+    scene_id: str
+    media_id: str
+    scene_index: int
+    start_seconds: float = Field(ge=0.0)
+    end_seconds: float = Field(gt=0.0)
+    duration_seconds: float = Field(gt=0.0)
+    thumbnail_url: Optional[str] = None
+    quality_score: float = Field(default=75.0, ge=0.0, le=100.0)
+    sharpness_score: float = Field(default=75.0, ge=0.0, le=100.0)
+    motion_level: Literal["static", "smooth", "action", "shaky"] = "static"
+    tags: list[str] = Field(default_factory=list)
+
+
+class MediaAnalysisResult(BaseModel):
+    quality: QualityBreakdown
+    semantic_tags: list[str] = Field(default_factory=list)
+    perceptual_hash: str = ""
+    duplicate_of_id: Optional[str] = None
+    similarity_percent: Optional[float] = Field(default=None, ge=0.0, le=100.0)
+    analyzed_at: str = Field(default_factory=utc_now_iso)
+
+
 class MediaAsset(BaseModel):
     id: str
     original_filename: str
@@ -71,7 +110,15 @@ class MediaAsset(BaseModel):
     proxy_path: Optional[str] = None
     metadata: MediaMetadata
     tags: list[str] = Field(default_factory=list)
+    analysis: Optional[MediaAnalysisResult] = None
+    scenes: list[DetectedScene] = Field(default_factory=list)
     created_at: str
+
+
+class MediaSearchResponse(BaseModel):
+    query: str
+    total_matches: int
+    results: list[MediaAsset]
 
 
 class MediaUploadResponse(BaseModel):

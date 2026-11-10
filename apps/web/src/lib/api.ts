@@ -26,6 +26,45 @@ export interface BackendMediaMetadata {
   rotation: number;
 }
 
+export interface BackendQualityBreakdown {
+  sharpness_score: number;
+  exposure_score: number;
+  stability_score: number;
+  composition_score: number;
+  laplacian_variance: number;
+  mean_luminance: number;
+  motion_intensity: "static" | "smooth" | "action" | "shaky";
+  lighting_mood: "bright" | "warm_golden" | "balanced" | "low_light";
+  face_count: number;
+  subject_position: string;
+  dominant_colors: string[];
+  overall_score: number;
+  explanation: string;
+}
+
+export interface BackendDetectedScene {
+  scene_id: string;
+  media_id: string;
+  scene_index: number;
+  start_seconds: number;
+  end_seconds: number;
+  duration_seconds: number;
+  thumbnail_url?: string | null;
+  quality_score: number;
+  sharpness_score: number;
+  motion_level: "static" | "smooth" | "action" | "shaky";
+  tags: string[];
+}
+
+export interface BackendMediaAnalysis {
+  quality: BackendQualityBreakdown;
+  semantic_tags: string[];
+  perceptual_hash: string;
+  duplicate_of_id?: string | null;
+  similarity_percent?: number | null;
+  analyzed_at: string;
+}
+
 export interface BackendMediaAsset {
   id: string;
   original_filename: string;
@@ -38,6 +77,8 @@ export interface BackendMediaAsset {
   proxy_url?: string | null;
   metadata: BackendMediaMetadata;
   tags: string[];
+  analysis?: BackendMediaAnalysis | null;
+  scenes?: BackendDetectedScene[];
   created_at: string;
 }
 
@@ -84,6 +125,28 @@ export async function checkBackendHealth(): Promise<BackendHealth | null> {
 export async function listMediaAssets(): Promise<BackendMediaAsset[]> {
   const res = await fetch(`${API_BASE_URL}/media`);
   if (!res.ok) throw new Error(`Failed to fetch media library (${res.status})`);
+  return (await res.json()) as BackendMediaAsset[];
+}
+
+export async function searchMediaAssets(params: {
+  q?: string;
+  tag?: string;
+  minQuality?: number;
+  excludeDuplicates?: boolean;
+}): Promise<{ query: string; total_matches: number; results: BackendMediaAsset[] }> {
+  const qs = new URLSearchParams();
+  if (params.q) qs.set("q", params.q);
+  if (params.tag && params.tag !== "all") qs.set("tag", params.tag);
+  if (params.minQuality !== undefined) qs.set("min_quality", String(params.minQuality));
+  if (params.excludeDuplicates) qs.set("exclude_duplicates", "true");
+  const res = await fetch(`${API_BASE_URL}/media/search?${qs.toString()}`);
+  if (!res.ok) throw new Error(`Search failed (${res.status})`);
+  return await res.json();
+}
+
+export async function analyzeAllMedia(): Promise<BackendMediaAsset[]> {
+  const res = await fetch(`${API_BASE_URL}/media/analyze-all`, { method: "POST" });
+  if (!res.ok) throw new Error(`Analysis failed (${res.status})`);
   return (await res.json()) as BackendMediaAsset[];
 }
 

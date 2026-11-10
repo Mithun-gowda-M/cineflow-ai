@@ -71,5 +71,14 @@ export interface UploadedMediaItem {
   tags: string[];
   blurScore: number; // 0-100 (higher = sharper)
   exposureScore: number; // 0-100 (optimal = 80-100)
+  stabilityScore?: number;
+  compositionScore?: number;
+  explanation?: string;
+  dominantColors?: string[];
+  scenesCount?: number;
+  duplicateOfId?: string | null;
+  similarityPercent?: number | null;
+  motionIntensity?: string;
+  lightingMood?: string;
 }
 

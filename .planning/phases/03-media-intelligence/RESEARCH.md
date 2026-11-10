@@ -58,3 +58,4 @@ Deterministic HSV + structural rules extract meaningful tags without paid Vision
   - 1 detected face (>4% frame area) → `Portrait`, `People`; 2+ faces → `Group`, `Celebration`
   - High motion energy → `Action`; steady wide framing → `Establishing`
 - **Search Query Ranking:** Tokenizes natural queries like `"find the best fireworks clips"` or `"brightest diya shots"`, strips stop-words (`find`, `the`, `best`, `most`, `clips`, `shots`), matches tags + filenames + explanations, and adjusts sort priority (`"best"` → quality, `"brightest"` → brightness/exposure, `"sharpest"` → sharpness).
+

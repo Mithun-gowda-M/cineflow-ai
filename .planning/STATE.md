@@ -1,7 +1,7 @@
 # PROJECT STATE: CINEFLOW AI
 
-> **Current Phase:** Phase 2 (Real Video Processing & Rendering Engine) — COMPLETED  
-> **Next Phase:** Phase 3 (AI Media Intelligence & Scene Detection) — PLANNED  
+> **Current Phase:** Phase 3 (AI Media Intelligence & Scene Detection) — COMPLETED  
+> **Next Phase:** Phase 4 (AI Director & Storyboard Generator) — READY TO PLAN  
 > **Last Updated:** 2026-11-10
 
 ---
@@ -13,8 +13,8 @@
 | **Phase 0** | Research, Environment & System Architecture | **COMPLETED** | 2026-11-09 |
 | **Phase 1** | Premium Frontend Design System & Workspaces | **COMPLETED** | 2026-11-09 |
 | **Phase 2** | Real Video Processing & Rendering Engine | **COMPLETED** | 2026-11-10 |
-| **Phase 3** | AI Media Intelligence & Scene Detection | **PLANNED & READY FOR EXECUTION** | 2026-11-10 |
-| **Phase 4** | AI Director & Storyboard Generator | Queued | — |
+| **Phase 3** | AI Media Intelligence & Scene Detection | **COMPLETED** | 2026-11-10 |
+| **Phase 4** | AI Director & Storyboard Generator | **READY TO PLAN** | — |
 | **Phase 5** | Advanced Cinematic Engine & Audio Intelligence | Queued | — |
 | **Phase 6** | Voice & Conversational Editing | Queued | — |
 | **Phase 7** | Trend Intelligence (Optional Style Recipes) | Queued | — |
@@ -41,11 +41,12 @@
 - **Version Control:** Git 2.56.0.windows.2 (`main` branch initialized)
 - **Package Managers Available:** Winget, Chocolatey, npm
 - **FFmpeg Status:** Verified `Gyan.FFmpeg 9.0.2` (`ffmpeg.exe` & `ffprobe.exe`), 16 CPU cores, encoders `h264_qsv` and `libx264`.
+- **CV Engine:** Verified `opencv-python-headless 5.0.0` + `scenedetect 0.7.3` + `numpy 2.5.4` inside `backend/.venv`.
 
 ---
 
-## 4. Immediate Next Actions (Phase 3)
-1. Plan Phase 3 (`/gsd-plan-phase 3`) for PySceneDetect automated scene splitting and OpenCV quality/blur/exposure analysis.
-2. Integrate computer vision scoring, semantic tagging, and duplicate shot filtering into the FastAPI media ingestion pipeline.
-3. Surface real CV scores and detected sub-scenes inside the Next.js Media Hub and Editor Library.
+## 4. Immediate Next Actions (Phase 4)
+1. Plan Phase 4 (`/gsd-plan-phase 4`) for AI Director & Storyboard Generator.
+2. Integrate local Ollama client (`llama3.2`/`mistral`) plus deterministic rule-based director fallback to parse creative instructions into structured, validated `TimelinePlan` JSONs.
+3. Build intelligent clip sequencer (narrative arc, quality weighting, duplicate exclusion, duration solver without artificial footage looping).
 

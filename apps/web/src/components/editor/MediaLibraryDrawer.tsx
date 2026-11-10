@@ -24,8 +24,10 @@ interface LibraryEntry {
   sourceId?: string;
   mediaKind: "video" | "image" | "audio";
   title: string;
-  type: "footage" | "broll" | "audio";
+  type: "footage" | "scenes" | "broll" | "audio";
   duration: number;
+  trimStart?: number;
+  trimEnd?: number;
   qualityScore: number;
   thumbnail: string;
   sourceUrl: string;
@@ -75,7 +77,7 @@ export const MediaLibraryDrawer: React.FC<MediaLibraryDrawerProps> = ({
   isCollapsed,
   onToggleCollapse,
 }) => {
-  const [activeTab, setActiveTab] = useState<"footage" | "broll" | "audio">("footage");
+  const [activeTab, setActiveTab] = useState<"footage" | "scenes" | "broll" | "audio">("footage");
   const [searchQuery, setSearchQuery] = useState("");
   const [realAssets, setRealAssets] = useState<LibraryEntry[]>([]);
   const [loading, setLoading] = useState(false);
@@ -84,22 +86,55 @@ export const MediaLibraryDrawer: React.FC<MediaLibraryDrawerProps> = ({
     setLoading(true);
     try {
       const assets = await listMediaAssets();
-      const mapped: LibraryEntry[] = assets.map((a) => ({
-        id: a.id,
-        sourceId: a.id,
-        mediaKind: a.media_kind,
-        title: a.original_filename,
-        type: a.media_kind === "audio" ? "audio" : a.media_kind === "image" ? "broll" : "footage",
-        duration: a.media_kind === "image" ? 4.0 : Math.max(0.5, Number(a.metadata.duration_seconds.toFixed(1))),
-        qualityScore: 92,
-        thumbnail:
+      const mapped: LibraryEntry[] = [];
+
+      for (const a of assets) {
+        const score = a.analysis ? Math.round(a.analysis.quality.overall_score) : 85;
+        const mainThumb =
           resolveBackendUrl(a.thumbnail_url) ||
-          "https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?auto=format&fit=crop&w=400&q=80",
-        sourceUrl: resolveBackendUrl(a.source_url),
-        proxyUrl: resolveBackendUrl(a.proxy_url),
-        tags: a.tags,
-        isReal: true,
-      }));
+          "https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?auto=format&fit=crop&w=400&q=80";
+        const sourceUrl = resolveBackendUrl(a.source_url);
+        const proxyUrl = resolveBackendUrl(a.proxy_url);
+
+        mapped.push({
+          id: a.id,
+          sourceId: a.id,
+          mediaKind: a.media_kind,
+          title: a.original_filename,
+          type: a.media_kind === "audio" ? "audio" : a.media_kind === "image" ? "broll" : "footage",
+          duration: a.media_kind === "image" ? 4.0 : Math.max(0.5, Number(a.metadata.duration_seconds.toFixed(1))),
+          trimStart: 0.0,
+          trimEnd: a.media_kind === "image" ? 4.0 : Math.max(0.5, Number(a.metadata.duration_seconds.toFixed(1))),
+          qualityScore: score,
+          thumbnail: mainThumb,
+          sourceUrl,
+          proxyUrl,
+          tags: a.tags,
+          isReal: true,
+        });
+
+        // Flatten detected PySceneDetect sub-scenes into the Scenes tab
+        if (a.scenes && a.scenes.length > 0) {
+          for (const sc of a.scenes) {
+            mapped.push({
+              id: sc.scene_id,
+              sourceId: a.id,
+              mediaKind: "video",
+              title: `${a.original_filename} · Scene ${sc.scene_index}`,
+              type: "scenes",
+              duration: Number(sc.duration_seconds.toFixed(1)),
+              trimStart: sc.start_seconds,
+              trimEnd: sc.end_seconds,
+              qualityScore: Math.round(sc.quality_score),
+              thumbnail: resolveBackendUrl(sc.thumbnail_url) || mainThumb,
+              sourceUrl,
+              proxyUrl,
+              tags: sc.tags,
+              isReal: true,
+            });
+          }
+        }
+      }
       setRealAssets(mapped);
     } catch {
       // Backend offline — demo assets remain available
@@ -115,13 +150,11 @@ export const MediaLibraryDrawer: React.FC<MediaLibraryDrawerProps> = ({
   const combinedLibrary = [...realAssets, ...DEMO_LIBRARY];
 
   const filtered = combinedLibrary.filter((item) => {
-    const matchesTab =
-      activeTab === "footage"
-        ? item.type === "footage"
-        : activeTab === "broll"
-        ? item.type === "broll"
-        : item.type === "audio";
-    const matchesSearch = item.title.toLowerCase().includes(searchQuery.toLowerCase());
+    const matchesTab = item.type === activeTab;
+    const matchesSearch =
+      !searchQuery.trim() ||
+      item.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      item.tags.some((t) => t.toLowerCase().includes(searchQuery.toLowerCase()));
     return matchesTab && matchesSearch;
   });
 
@@ -150,7 +183,7 @@ export const MediaLibraryDrawer: React.FC<MediaLibraryDrawerProps> = ({
           <button
             onClick={loadAssets}
             className="p-1 rounded text-gray-400 hover:text-cine-gold-400 hover:bg-white/5 transition-colors"
-            title="Refresh Uploaded Media"
+            title="Refresh Analyzed Media"
           >
             <RefreshCw className={`w-3.5 h-3.5 ${loading ? "animate-spin" : ""}`} />
           </button>
@@ -165,7 +198,7 @@ export const MediaLibraryDrawer: React.FC<MediaLibraryDrawerProps> = ({
       </div>
 
       {/* Tabs */}
-      <div className="grid grid-cols-3 p-1.5 bg-cine-black/50 border-b border-cine-border text-[11px]">
+      <div className="grid grid-cols-4 p-1.5 bg-cine-black/50 border-b border-cine-border text-[10px]">
         <button
           onClick={() => setActiveTab("footage")}
           className={`py-1 rounded font-medium transition-colors ${
@@ -175,6 +208,16 @@ export const MediaLibraryDrawer: React.FC<MediaLibraryDrawerProps> = ({
           }`}
         >
           Clips ({combinedLibrary.filter((x) => x.type === "footage").length})
+        </button>
+        <button
+          onClick={() => setActiveTab("scenes")}
+          className={`py-1 rounded font-medium transition-colors ${
+            activeTab === "scenes"
+              ? "bg-cine-card text-cine-cyan-400 border border-cine-border shadow-sm"
+              : "text-gray-400 hover:text-white"
+          }`}
+        >
+          Scenes ({combinedLibrary.filter((x) => x.type === "scenes").length})
         </button>
         <button
           onClick={() => setActiveTab("broll")}
@@ -204,7 +247,7 @@ export const MediaLibraryDrawer: React.FC<MediaLibraryDrawerProps> = ({
           <Search className="w-3.5 h-3.5 absolute left-2.5 top-2.5 text-gray-500" />
           <input
             type="text"
-            placeholder="Search footage..."
+            placeholder="Search clips or tags..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             className="w-full pl-8 pr-2 py-1.5 rounded-lg bg-cine-black border border-cine-border text-xs text-white placeholder-gray-500 focus:outline-none focus:border-cine-gold-500"
@@ -226,8 +269,8 @@ export const MediaLibraryDrawer: React.FC<MediaLibraryDrawerProps> = ({
                 proxyUrl: item.proxyUrl,
                 thumbnailUrl: item.thumbnail,
                 duration: item.duration,
-                trimStart: 0.0,
-                trimEnd: item.duration,
+                trimStart: item.trimStart ?? 0.0,
+                trimEnd: item.trimEnd ?? item.duration,
                 qualityScore: item.qualityScore,
                 tags: item.tags,
                 trackId: item.type === "audio" ? "a2" : "v1",
@@ -252,7 +295,7 @@ export const MediaLibraryDrawer: React.FC<MediaLibraryDrawerProps> = ({
                 </h5>
                 {item.isReal && (
                   <span className="text-[9px] px-1 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
-                    Local
+                    CV
                   </span>
                 )}
               </div>
@@ -267,6 +310,11 @@ export const MediaLibraryDrawer: React.FC<MediaLibraryDrawerProps> = ({
             </div>
           </div>
         ))}
+        {filtered.length === 0 && (
+          <div className="text-center py-8 text-xs text-gray-500">
+            No items match this filter yet.
+          </div>
+        )}
       </div>
     </aside>
   );

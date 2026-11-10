@@ -11,6 +11,8 @@ from typing import Iterator, Optional
 
 from backend.api.config import get_settings, utc_now_iso
 from backend.api.schemas import (
+    DetectedScene,
+    MediaAnalysisResult,
     MediaAsset,
     MediaMetadata,
     ProjectResponse,
@@ -63,7 +65,23 @@ class Database:
                     proxy_path TEXT,
                     metadata_json TEXT NOT NULL,
                     tags_json TEXT NOT NULL,
+                    analysis_json TEXT,
                     created_at TEXT NOT NULL
+                );
+
+                CREATE TABLE IF NOT EXISTS detected_scenes (
+                    scene_id TEXT PRIMARY KEY,
+                    media_id TEXT NOT NULL,
+                    scene_index INTEGER NOT NULL,
+                    start_seconds REAL NOT NULL,
+                    end_seconds REAL NOT NULL,
+                    duration_seconds REAL NOT NULL,
+                    thumbnail_url TEXT,
+                    quality_score REAL NOT NULL DEFAULT 75.0,
+                    sharpness_score REAL NOT NULL DEFAULT 75.0,
+                    motion_level TEXT NOT NULL DEFAULT 'static',
+                    tags_json TEXT NOT NULL DEFAULT '[]',
+                    FOREIGN KEY (media_id) REFERENCES media_assets(id) ON DELETE CASCADE
                 );
 
                 CREATE TABLE IF NOT EXISTS projects (
@@ -94,6 +112,10 @@ class Database:
                 );
                 """
             )
+            # Safe idempotent migration for pre-Phase 3 SQLite databases
+            cols = {r["name"] for r in conn.execute("PRAGMA table_info(media_assets)").fetchall()}
+            if "analysis_json" not in cols:
+                conn.execute("ALTER TABLE media_assets ADD COLUMN analysis_json TEXT")
 
     # ---- Media Assets ----
 
@@ -101,11 +123,25 @@ class Database:
         with self._connect() as conn:
             conn.execute(
                 """
-                INSERT OR REPLACE INTO media_assets (
+                INSERT INTO media_assets (
                     id, original_filename, stored_filename, media_kind, mime_type,
                     file_size_bytes, file_path, source_url, thumbnail_url,
-                    proxy_url, proxy_path, metadata_json, tags_json, created_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    proxy_url, proxy_path, metadata_json, tags_json, analysis_json, created_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(id) DO UPDATE SET
+                    original_filename = excluded.original_filename,
+                    stored_filename = excluded.stored_filename,
+                    media_kind = excluded.media_kind,
+                    mime_type = excluded.mime_type,
+                    file_size_bytes = excluded.file_size_bytes,
+                    file_path = excluded.file_path,
+                    source_url = excluded.source_url,
+                    thumbnail_url = excluded.thumbnail_url,
+                    proxy_url = excluded.proxy_url,
+                    proxy_path = excluded.proxy_path,
+                    metadata_json = excluded.metadata_json,
+                    tags_json = excluded.tags_json,
+                    analysis_json = excluded.analysis_json
                 """,
                 (
                     asset.id,
@@ -121,12 +157,73 @@ class Database:
                     asset.proxy_path,
                     asset.metadata.model_dump_json(),
                     json.dumps(asset.tags),
+                    asset.analysis.model_dump_json() if asset.analysis else None,
                     asset.created_at,
                 ),
             )
+            if asset.scenes:
+                self._replace_scenes_in_conn(conn, asset.id, asset.scenes)
         return asset
 
-    def _row_to_media(self, row: sqlite3.Row) -> MediaAsset:
+    def _replace_scenes_in_conn(
+        self, conn: sqlite3.Connection, media_id: str, scenes: list[DetectedScene]
+    ) -> None:
+        conn.execute("DELETE FROM detected_scenes WHERE media_id = ?", (media_id,))
+        for sc in scenes:
+            conn.execute(
+                """
+                INSERT INTO detected_scenes (
+                    scene_id, media_id, scene_index, start_seconds, end_seconds,
+                    duration_seconds, thumbnail_url, quality_score, sharpness_score,
+                    motion_level, tags_json
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    sc.scene_id,
+                    media_id,
+                    sc.scene_index,
+                    sc.start_seconds,
+                    sc.end_seconds,
+                    sc.duration_seconds,
+                    sc.thumbnail_url,
+                    sc.quality_score,
+                    sc.sharpness_score,
+                    sc.motion_level,
+                    json.dumps(sc.tags),
+                ),
+            )
+
+    def save_detected_scenes(self, media_id: str, scenes: list[DetectedScene]) -> list[DetectedScene]:
+        with self._connect() as conn:
+            self._replace_scenes_in_conn(conn, media_id, scenes)
+        return scenes
+
+    def _row_to_scene(self, row: sqlite3.Row) -> DetectedScene:
+        return DetectedScene(
+            scene_id=row["scene_id"],
+            media_id=row["media_id"],
+            scene_index=row["scene_index"],
+            start_seconds=row["start_seconds"],
+            end_seconds=row["end_seconds"],
+            duration_seconds=row["duration_seconds"],
+            thumbnail_url=row["thumbnail_url"],
+            quality_score=row["quality_score"],
+            sharpness_score=row["sharpness_score"],
+            motion_level=row["motion_level"],
+            tags=json.loads(row["tags_json"]),
+        )
+
+    def get_detected_scenes(self, media_id: str) -> list[DetectedScene]:
+        with self._connect() as conn:
+            rows = conn.execute(
+                "SELECT * FROM detected_scenes WHERE media_id = ? ORDER BY scene_index ASC",
+                (media_id,),
+            ).fetchall()
+            return [self._row_to_scene(r) for r in rows]
+
+    def _row_to_media(self, row: sqlite3.Row, scenes: Optional[list[DetectedScene]] = None) -> MediaAsset:
+        analysis_raw = row["analysis_json"] if "analysis_json" in row.keys() else None
+        analysis = MediaAnalysisResult.model_validate_json(analysis_raw) if analysis_raw else None
         return MediaAsset(
             id=row["id"],
             original_filename=row["original_filename"],
@@ -141,13 +238,21 @@ class Database:
             proxy_path=row["proxy_path"],
             metadata=MediaMetadata.model_validate_json(row["metadata_json"]),
             tags=json.loads(row["tags_json"]),
+            analysis=analysis,
+            scenes=scenes if scenes is not None else [],
             created_at=row["created_at"],
         )
 
     def get_media_asset(self, media_id: str) -> Optional[MediaAsset]:
         with self._connect() as conn:
             row = conn.execute("SELECT * FROM media_assets WHERE id = ?", (media_id,)).fetchone()
-            return self._row_to_media(row) if row else None
+            if not row:
+                return None
+            scene_rows = conn.execute(
+                "SELECT * FROM detected_scenes WHERE media_id = ? ORDER BY scene_index ASC",
+                (media_id,),
+            ).fetchall()
+            return self._row_to_media(row, [self._row_to_scene(s) for s in scene_rows])
 
     def list_media_assets(self, media_kind: Optional[str] = None) -> list[MediaAsset]:
         with self._connect() as conn:
@@ -158,7 +263,16 @@ class Database:
                 ).fetchall()
             else:
                 rows = conn.execute("SELECT * FROM media_assets ORDER BY created_at DESC").fetchall()
-            return [self._row_to_media(r) for r in rows]
+
+            all_scenes = conn.execute(
+                "SELECT * FROM detected_scenes ORDER BY scene_index ASC"
+            ).fetchall()
+            scenes_by_media: dict[str, list[DetectedScene]] = {}
+            for sr in all_scenes:
+                sc = self._row_to_scene(sr)
+                scenes_by_media.setdefault(sc.media_id, []).append(sc)
+
+            return [self._row_to_media(r, scenes_by_media.get(r["id"], [])) for r in rows]
 
     def delete_media_asset(self, media_id: str) -> Optional[MediaAsset]:
         asset = self.get_media_asset(media_id)

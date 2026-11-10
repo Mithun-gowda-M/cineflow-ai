@@ -333,6 +333,7 @@ class DirectorPlanRequest(BaseModel):
     aspect_ratio: Optional[AspectRatio] = None
     use_llm: bool = True
     beat_sync: bool = True
+    style_recipe_id: Optional[str] = None
 
 
 class DirectorPlanResponse(BaseModel):
@@ -457,4 +458,70 @@ class ProjectHistoryResponse(BaseModel):
     can_redo: bool
     timeline: Optional[TimelinePlan] = None
     revisions: list[TimelineRevisionRecord] = Field(default_factory=list)
+
+
+# ---- Phase 7: Trend Intelligence & Original Style Recipe Schemas ----
+
+StyleRecipeSourceType = Literal["builtin", "uploaded_reference", "url_pattern"]
+MotionProfile = Literal["static", "smooth_glide", "dynamic_burst", "high_velocity"]
+CutCadence = Literal["rapid", "moderate", "deliberate"]
+
+
+class TrendSafetyAudit(BaseModel):
+    copyright_safe: bool = True
+    media_downloaded: bool = False
+    private_scraping_blocked: bool = True
+    raw_frames_retained: bool = False
+    compliance_note: str = (
+        "Extracts abstract mathematical editing parameters only; zero source frames or copyrighted streams retained."
+    )
+
+
+class StyleRecipe(BaseModel):
+    id: str
+    name: str = Field(min_length=2, max_length=160)
+    description: str = ""
+    source_type: StyleRecipeSourceType = "builtin"
+    is_builtin: bool = False
+    reference_label: Optional[str] = None
+    cuts_per_minute: float = Field(ge=0.0, default=18.0)
+    avg_shot_duration_seconds: float = Field(gt=0.1, default=3.2)
+    cut_cadence: CutCadence = "moderate"
+    motion_velocity_score: float = Field(ge=0.0, le=100.0, default=55.0)
+    motion_profile: MotionProfile = "smooth_glide"
+    color_mood: str = "balanced"
+    recommended_color_grade: ColorGradePreset = "golden_hour"
+    recommended_aspect_ratio: AspectRatio = "16:9"
+    recommended_pacing: PacingStyle = "dynamic_arc"
+    recommended_speed_ramp: SpeedRampPreset = "none"
+    recommended_transition: TransitionType = "crossfade"
+    cinematic_effects: CinematicEffects = Field(default_factory=CinematicEffects)
+    dominant_palette: list[str] = Field(default_factory=list)
+    energy_arc: list[str] = Field(default_factory=lambda: ["Opening Hook", "Rising Action", "Climax", "Emotional Resolution"])
+    prompt_hint: str = ""
+    safety_audit: TrendSafetyAudit = Field(default_factory=TrendSafetyAudit)
+    created_at: str = Field(default_factory=utc_now_iso)
+
+
+class StyleAnalyzeUrlRequest(BaseModel):
+    reference_url: str = Field(min_length=4, max_length=2000)
+    recipe_name: Optional[str] = Field(default=None, max_length=160)
+    style_notes: str = Field(default="", max_length=1000)
+
+
+class StyleApplyRequest(BaseModel):
+    project_id: str = Field(default="proj_studio_01", min_length=1, max_length=128)
+    timeline: TimelinePlan
+    record_history: bool = True
+
+
+class StyleApplyResponse(BaseModel):
+    recipe: StyleRecipe
+    timeline: TimelinePlan
+    diff: TimelineDiffSummary
+    changes_applied: list[str] = Field(default_factory=list)
+    revision_index: int = 0
+    history_count: int = 0
+    can_undo: bool = False
+    can_redo: bool = False
 

@@ -13,9 +13,11 @@ from backend.api.schemas import (
     DirectorPlanRequest,
     DirectorPlanResponse,
     MediaAsset,
+    StyleRecipe,
 )
 from backend.audio_engine.analyzer import analyze_audio_file
 from backend.audio_engine.beat_sync import align_timeline_to_beats
+from backend.trend_intelligence.recipe_generator import ensure_builtin_recipes_seeded
 
 
 class DirectorNoFootageError(ValueError):
@@ -41,6 +43,20 @@ async def generate_director_plan(request: DirectorPlanRequest) -> DirectorPlanRe
         duration_override=request.target_duration_seconds,
         aspect_override=request.aspect_ratio,
     )
+
+    active_recipe: StyleRecipe | None = None
+    if request.style_recipe_id:
+        ensure_builtin_recipes_seeded()
+        active_recipe = db.get_style_recipe(request.style_recipe_id)
+        if active_recipe is None:
+            raise ValueError(f"Style recipe '{request.style_recipe_id}' not found.")
+        intent = intent.model_copy(
+            update={
+                "color_grade": active_recipe.recommended_color_grade,
+                "pacing": active_recipe.recommended_pacing,
+                "aspect_ratio": request.aspect_ratio or active_recipe.recommended_aspect_ratio,
+            }
+        )
 
     candidates, audio_assets, extract_warnings = extract_candidates(assets)
     if not candidates:
@@ -89,6 +105,31 @@ async def generate_director_plan(request: DirectorPlanRequest) -> DirectorPlanRe
         )
         plan_warnings = [*rule_warnings, *val_warnings]
         engine_used = "rule_fallback"
+
+    if active_recipe is not None:
+        styled_clips = [
+            clip.model_copy(
+                update={
+                    "speed_ramp": (
+                        active_recipe.recommended_speed_ramp
+                        if (idx == len(timeline.video_clips) - 1 or (idx > 0 and len(timeline.video_clips) >= 2))
+                        else clip.speed_ramp
+                    )
+                }
+            )
+            for idx, clip in enumerate(timeline.video_clips)
+        ]
+        timeline = timeline.model_copy(
+            update={
+                "color_grade": active_recipe.recommended_color_grade,
+                "aspect_ratio": request.aspect_ratio or active_recipe.recommended_aspect_ratio,
+                "cinematic_effects": active_recipe.cinematic_effects.model_copy(),
+                "video_clips": styled_clips,
+            }
+        )
+        plan_warnings.append(
+            f"Applied style recipe '{active_recipe.name}' ({active_recipe.cuts_per_minute:.0f} cuts/min)."
+        )
 
     if request.beat_sync and timeline.audio_tracks:
         primary_audio_id = timeline.audio_tracks[0].source_id

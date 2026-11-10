@@ -16,6 +16,7 @@ import {
   Type,
   Plus,
   MessageSquare,
+  Wand2,
 } from "lucide-react";
 import { GoldButton } from "@/components/ui/GoldButton";
 import { Badge } from "@/components/ui/Badge";
@@ -53,6 +54,8 @@ interface AiDirectorDrawerProps {
   onAutoCaption?: () => Promise<void> | void;
   canAutoCaption?: boolean;
   isCaptioning?: boolean;
+  onOpenStyleRecipes?: () => void;
+  activeStyleRecipeName?: string | null;
   storyboard?: BackendStoryboardBeat[];
   directorEngine?: "ollama" | "rule_fallback" | "demo" | null;
   directorWarnings?: string[];
@@ -82,6 +85,8 @@ export const AiDirectorDrawer: React.FC<AiDirectorDrawerProps> = ({
   onAutoCaption,
   canAutoCaption = false,
   isCaptioning = false,
+  onOpenStyleRecipes,
+  activeStyleRecipeName = null,
   storyboard = [],
   directorEngine = null,
   directorWarnings = [],
@@ -220,6 +225,22 @@ export const AiDirectorDrawer: React.FC<AiDirectorDrawerProps> = ({
               : "Direct Cut"}
           </GoldButton>
         </div>
+
+        {onOpenStyleRecipes && (
+          <button
+            type="button"
+            onClick={onOpenStyleRecipes}
+            className="w-full py-1.5 px-2.5 rounded-lg bg-cine-surface border border-cine-border hover:border-cine-gold-500/60 text-[11px] text-gray-200 flex items-center justify-between transition-colors"
+          >
+            <span className="flex items-center gap-1.5">
+              <Wand2 className="w-3.5 h-3.5 text-cine-gold-400" />
+              Trend Style Recipes
+            </span>
+            <span className="text-[10px] font-mono text-cine-cyan-300 truncate max-w-[120px]">
+              {activeStyleRecipeName || "Browse / Extract"}
+            </span>
+          </button>
+        )}
 
         {(voiceError || directorError) && (
           <div className="p-2 rounded bg-red-500/10 border border-red-500/30 text-[11px] text-red-300 flex items-start gap-1.5">

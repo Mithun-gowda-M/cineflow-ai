@@ -7,6 +7,7 @@ import { VideoPreviewCanvas } from "@/components/editor/VideoPreviewCanvas";
 import { AiDirectorDrawer } from "@/components/editor/AiDirectorDrawer";
 import { MultiTrackTimeline } from "@/components/editor/MultiTrackTimeline";
 import { ExportModal } from "@/components/editor/ExportModal";
+import { StyleRecipeModal } from "@/components/editor/StyleRecipeModal";
 import {
   AspectRatio,
   CinematicEffects,
@@ -16,10 +17,12 @@ import {
   TransitionType,
 } from "@/types";
 import {
+  applyStyleRecipe,
   BackendAudioAnalysis,
   BackendDirectorPlanResponse,
   BackendMediaAsset,
   BackendStoryboardBeat,
+  BackendStyleRecipe,
   beatSyncTimeline,
   checkBackendHealth,
   editTimelineConversationally,
@@ -71,6 +74,8 @@ export default function EditorStudioPage() {
   const [beatSyncMessage, setBeatSyncMessage] = useState<string>("");
   const [editDiffChanges, setEditDiffChanges] = useState<string[]>([]);
   const [isCaptioning, setIsCaptioning] = useState<boolean>(false);
+  const [isStyleModalOpen, setIsStyleModalOpen] = useState<boolean>(false);
+  const [activeStyleRecipe, setActiveStyleRecipe] = useState<BackendStyleRecipe | null>(null);
 
   // Initial timeline clips (realistic demo project data)
   const [clips, setClips] = useState<TimelineClip[]>([
@@ -422,6 +427,7 @@ export default function EditorStudioPage() {
           const plan = await generateDirectorPlan({
             projectId: "proj_studio_01",
             instruction,
+            styleRecipeId: activeStyleRecipe?.id,
           });
           const snap = hydrateTimelineSnapshot(plan.timeline, assetById);
           pushHistorySnapshot(snap);
@@ -682,6 +688,63 @@ export default function EditorStudioPage() {
     pushHistorySnapshot({ subtitles: subtitles.filter((s) => s.id !== id) });
   };
 
+  const handleApplyStyleRecipe = async (recipe: BackendStyleRecipe) => {
+    setActiveStyleRecipe(recipe);
+    setDirectorError("");
+    const hasRealVisual = clips.some(
+      (c) => (c.trackId === "v1" || c.trackId === "v2") && Boolean(c.sourceId)
+    );
+    const health = hasRealVisual ? await checkBackendHealth() : null;
+
+    if (health && hasRealVisual) {
+      try {
+        const backendAssets = await listMediaAssets();
+        const assetById = new Map(backendAssets.map((a) => [a.id, a]));
+        const applied = await applyStyleRecipe({
+          recipeId: recipe.id,
+          projectId: "proj_studio_01",
+          title: projectTitle,
+          aspectRatio,
+          colorGrade,
+          clips,
+          subtitles,
+          cinematicEffects,
+        });
+        const snap = hydrateTimelineSnapshot(applied.timeline, assetById);
+        pushHistorySnapshot(snap);
+        setEditDiffChanges(applied.changes_applied);
+        return;
+      } catch (err) {
+        setDirectorError(err instanceof Error ? err.message : "Failed to apply style recipe.");
+        return;
+      }
+    }
+
+    // Demo fallback / offline application of abstract style parameters
+    const styledClips = clips.map((c, idx) =>
+      c.trackId === "v1"
+        ? {
+            ...c,
+            speedRamp: idx > 0 ? recipe.recommended_speed_ramp : c.speedRamp,
+            transition: (idx > 0 ? (recipe.recommended_transition as TransitionType) : c.transition),
+          }
+        : c
+    );
+    pushHistorySnapshot({
+      clips: styledClips,
+      colorGrade: recipe.recommended_color_grade,
+      aspectRatio: recipe.recommended_aspect_ratio,
+      cinematicEffects: {
+        vignette: recipe.cinematic_effects.vignette,
+        filmGrain: recipe.cinematic_effects.film_grain,
+        kenBurnsOnImages: recipe.cinematic_effects.ken_burns_on_images,
+        audioDucking: recipe.cinematic_effects.audio_ducking,
+        loudnessNormalize: recipe.cinematic_effects.loudness_normalize,
+      },
+    });
+    setEditDiffChanges([`Applied Style Recipe '${recipe.name}' (${recipe.cuts_per_minute.toFixed(0)} cuts/min)`]);
+  };
+
   return (
     <div className="h-screen w-screen flex flex-col bg-cine-black overflow-hidden select-none">
       {/* Top Header */}
@@ -748,6 +811,8 @@ export default function EditorStudioPage() {
           onAutoCaption={handleAutoCaption}
           canAutoCaption={Boolean(captionCandidateClip)}
           isCaptioning={isCaptioning}
+          onOpenStyleRecipes={() => setIsStyleModalOpen(true)}
+          activeStyleRecipeName={activeStyleRecipe?.name || null}
           storyboard={storyboard}
           directorEngine={directorEngine}
           directorWarnings={directorWarnings}
@@ -780,6 +845,15 @@ export default function EditorStudioPage() {
         clips={clips}
         subtitles={subtitles}
         cinematicEffects={cinematicEffects}
+      />
+
+      {/* Phase 7 Trend Intelligence & Style Recipes Modal */}
+      <StyleRecipeModal
+        isOpen={isStyleModalOpen}
+        onClose={() => setIsStyleModalOpen(false)}
+        activeRecipeId={activeStyleRecipe?.id || null}
+        onApplyRecipe={handleApplyStyleRecipe}
+        onSelectForDirector={(recipe) => setActiveStyleRecipe(recipe)}
       />
     </div>
   );

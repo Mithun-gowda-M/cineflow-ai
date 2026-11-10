@@ -1,7 +1,7 @@
 # PROJECT STATE: CINEFLOW AI
 
-> **Current Phase:** Phase 6 (Voice & Conversational Editing) — COMPLETED  
-> **Next Phase:** Phase 7 (Trend Intelligence — Optional Style Recipes) — PLANNED & READY FOR EXECUTION  
+> **Current Phase:** Phase 7 (Trend Intelligence — Optional Style Recipes) — COMPLETED  
+> **Next Phase:** Phase 8 (Institutional Campus Deployment & Security) — READY TO PLAN  
 > **Last Updated:** 2026-11-10
 
 ---
@@ -17,8 +17,8 @@
 | **Phase 4** | AI Director & Storyboard Generator | **COMPLETED** | 2026-11-10 |
 | **Phase 5** | Advanced Cinematic Engine & Audio Intelligence | **COMPLETED** | 2026-11-10 |
 | **Phase 6** | Voice & Conversational Editing | **COMPLETED** | 2026-11-10 |
-| **Phase 7** | Trend Intelligence (Optional Style Recipes) | **PLANNED & READY FOR EXECUTION** | 2026-11-10 |
-| **Phase 8** | Institutional Campus Deployment & Security | Queued | — |
+| **Phase 7** | Trend Intelligence (Optional Style Recipes) | **COMPLETED** | 2026-11-10 |
+| **Phase 8** | Institutional Campus Deployment & Security | **READY TO PLAN** | — |
 | **Phase 9** | Hackathon Presentation & Demonstration Package | Queued | — |
 
 ---
@@ -45,7 +45,7 @@
 
 ---
 
-## 4. Immediate Next Actions (Phase 7)
-1. Execute Phase 7 (`/gsd-execute-phase 7`) to implement reference video style analysis (cut frequency, motion velocity, color mood), copyright-safe SSRF/no-scraping guards, abstract `StyleRecipe` persistence, AI Director style integration, and Studio UI controls.
-2. Verify all unit, security/SSRF, API, and Next.js production build gates cleanly.
+## 4. Immediate Next Actions (Phase 8)
+1. Plan Phase 8 (`/gsd-plan-phase 8`) for student JWT authentication + RBAC (student vs club admin), storage quota enforcement & automated cache cleanup, Institutional Admin Dashboard metrics, PostgreSQL migration readiness, and BMSIT technical club handover docs.
+2. Verify all campus auth, quota, cleanup, and build gates cleanly.
 

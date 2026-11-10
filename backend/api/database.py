@@ -20,6 +20,7 @@ from backend.api.schemas import (
     ProjectHistoryResponse,
     ProjectResponse,
     RenderJobStatus,
+    StyleRecipe,
     TimelineDiffSummary,
     TimelinePlan,
     TimelineRevisionRecord,
@@ -132,6 +133,16 @@ class Database:
                 );
                 CREATE INDEX IF NOT EXISTS idx_revisions_project_idx
                     ON timeline_revisions(project_id, revision_index);
+
+                CREATE TABLE IF NOT EXISTS style_recipes (
+                    id TEXT PRIMARY KEY,
+                    name TEXT NOT NULL,
+                    description TEXT NOT NULL,
+                    source_type TEXT NOT NULL,
+                    is_builtin INTEGER NOT NULL DEFAULT 0,
+                    recipe_json TEXT NOT NULL,
+                    created_at TEXT NOT NULL
+                );
                 """
             )
             # Safe idempotent migration for pre-Phase 3/5/6 SQLite databases
@@ -611,6 +622,63 @@ class Database:
                     (target_tl_json, utc_now_iso(), project_id),
                 )
             return self._build_history_response(conn, project_id)
+
+    # ---- Phase 7: Trend Intelligence Style Recipes ----
+
+    def save_style_recipe(self, recipe: StyleRecipe) -> StyleRecipe:
+        with self._connect() as conn:
+            conn.execute(
+                """
+                INSERT INTO style_recipes (
+                    id, name, description, source_type, is_builtin, recipe_json, created_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(id) DO UPDATE SET
+                    name = excluded.name,
+                    description = excluded.description,
+                    source_type = excluded.source_type,
+                    is_builtin = excluded.is_builtin,
+                    recipe_json = excluded.recipe_json
+                """,
+                (
+                    recipe.id,
+                    recipe.name,
+                    recipe.description,
+                    recipe.source_type,
+                    int(recipe.is_builtin),
+                    recipe.model_dump_json(),
+                    recipe.created_at,
+                ),
+            )
+        return recipe
+
+    def list_style_recipes(self) -> list[StyleRecipe]:
+        with self._connect() as conn:
+            rows = conn.execute(
+                "SELECT recipe_json FROM style_recipes ORDER BY is_builtin DESC, created_at DESC"
+            ).fetchall()
+            return [StyleRecipe.model_validate_json(r["recipe_json"]) for r in rows]
+
+    def get_style_recipe(self, recipe_id: str) -> Optional[StyleRecipe]:
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT recipe_json FROM style_recipes WHERE id = ?",
+                (recipe_id,),
+            ).fetchone()
+            return StyleRecipe.model_validate_json(row["recipe_json"]) if row else None
+
+    def delete_style_recipe(self, recipe_id: str) -> tuple[bool, bool]:
+        """Delete a non-builtin recipe. Returns `(deleted, was_builtin)`."""
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT is_builtin FROM style_recipes WHERE id = ?",
+                (recipe_id,),
+            ).fetchone()
+            if not row:
+                return False, False
+            if row["is_builtin"]:
+                return False, True
+            cur = conn.execute("DELETE FROM style_recipes WHERE id = ?", (recipe_id,))
+            return cur.rowcount > 0, False
 
 
 _db_instance: Optional[Database] = None

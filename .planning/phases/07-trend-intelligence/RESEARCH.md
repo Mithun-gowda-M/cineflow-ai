@@ -34,3 +34,4 @@ To enforce strict academic, hackathon, and legal compliance:
 - Each `StyleRecipe` encapsulates abstract, copyright-free parameters (`cuts_per_minute`, `avg_shot_duration_seconds`, `motion_velocity_score`, `color_mood`, `recommended_color_grade`, `recommended_aspect_ratio`, `recommended_pacing`, `recommended_speed_ramp`, `recommended_transition`, `cinematic_effects`, `dominant_palette`, `prompt_hint`, `copyright_safe=True`).
 - Stored in SQLite `style_recipes` table alongside 5 curated built-in studio templates (protected from accidental deletion).
 - Wired directly into `POST /api/v1/director/plan` via optional `style_recipe_id` and applied 1-click onto active timelines via `POST /api/v1/trends/recipes/{recipe_id}/apply` with full diff calculation (`diff_engine.py`) and Undo/Redo revision tracking (`database.py`).
+

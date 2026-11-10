@@ -403,6 +403,7 @@ export async function generateDirectorPlan(params: {
   targetDurationSeconds?: number;
   aspectRatio?: AspectRatio;
   beatSync?: boolean;
+  styleRecipeId?: string;
 }): Promise<BackendDirectorPlanResponse> {
   const res = await fetch(`${API_BASE_URL}/director/plan`, {
     method: "POST",
@@ -414,6 +415,7 @@ export async function generateDirectorPlan(params: {
       aspect_ratio: params.aspectRatio,
       use_llm: true,
       beat_sync: params.beatSync ?? true,
+      style_recipe_id: params.styleRecipeId || undefined,
     }),
   });
   if (!res.ok) {
@@ -634,5 +636,129 @@ export async function redoProjectHistory(projectId: string): Promise<BackendProj
   });
   if (!res.ok) throw new Error(`Redo failed (${res.status})`);
   return (await res.json()) as BackendProjectHistoryResponse;
+}
+
+// ---- Phase 7: Trend Intelligence & Original Style Recipes ----
+
+export interface BackendStyleRecipe {
+  id: string;
+  name: string;
+  description: string;
+  source_type: "builtin" | "uploaded_reference" | "url_pattern";
+  is_builtin: boolean;
+  reference_label?: string | null;
+  cuts_per_minute: number;
+  avg_shot_duration_seconds: number;
+  cut_cadence: "rapid" | "moderate" | "deliberate";
+  motion_velocity_score: number;
+  motion_profile: "static" | "smooth_glide" | "dynamic_burst" | "high_velocity";
+  color_mood: string;
+  recommended_color_grade: ColorGradePreset;
+  recommended_aspect_ratio: AspectRatio;
+  recommended_pacing: string;
+  recommended_speed_ramp: SpeedRampPreset;
+  recommended_transition: string;
+  cinematic_effects: {
+    vignette: boolean;
+    film_grain: boolean;
+    ken_burns_on_images: boolean;
+    audio_ducking: boolean;
+    loudness_normalize: boolean;
+  };
+  dominant_palette: string[];
+  prompt_hint: string;
+  safety_audit: {
+    copyright_safe: boolean;
+    media_downloaded: boolean;
+    private_scraping_blocked: boolean;
+    raw_frames_retained: boolean;
+    compliance_note: string;
+  };
+  created_at: string;
+}
+
+export interface BackendStyleApplyResponse {
+  recipe: BackendStyleRecipe;
+  timeline: BackendDirectorPlanResponse["timeline"];
+  diff: BackendTimelineDiffSummary;
+  changes_applied: string[];
+  revision_index: number;
+  history_count: number;
+  can_undo: boolean;
+  can_redo: boolean;
+}
+
+export async function listStyleRecipes(): Promise<BackendStyleRecipe[]> {
+  const res = await fetch(`${API_BASE_URL}/trends/recipes`);
+  if (!res.ok) throw new Error(`Failed to load style recipes (${res.status})`);
+  return (await res.json()) as BackendStyleRecipe[];
+}
+
+export async function analyzeReferenceVideoUpload(
+  file: File,
+  recipeName?: string
+): Promise<BackendStyleRecipe> {
+  const form = new FormData();
+  form.append("file", file);
+  if (recipeName) form.append("recipe_name", recipeName);
+  const res = await fetch(`${API_BASE_URL}/trends/analyze-upload`, {
+    method: "POST",
+    body: form,
+  });
+  if (!res.ok) {
+    const errBody = await res.json().catch(() => ({ detail: res.statusText }));
+    throw new Error(errBody.detail || `Reference video analysis failed (${res.status})`);
+  }
+  return (await res.json()) as BackendStyleRecipe;
+}
+
+export async function analyzeSafeReferenceUrl(params: {
+  referenceUrl: string;
+  recipeName?: string;
+  styleNotes?: string;
+}): Promise<BackendStyleRecipe> {
+  const res = await fetch(`${API_BASE_URL}/trends/analyze-url`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      reference_url: params.referenceUrl,
+      recipe_name: params.recipeName || undefined,
+      style_notes: params.styleNotes || "",
+    }),
+  });
+  if (!res.ok) {
+    const errBody = await res.json().catch(() => ({ detail: res.statusText }));
+    throw new Error(errBody.detail || `Reference URL analysis failed (${res.status})`);
+  }
+  return (await res.json()) as BackendStyleRecipe;
+}
+
+export async function applyStyleRecipe(params: {
+  recipeId: string;
+  projectId: string;
+  title: string;
+  aspectRatio: AspectRatio;
+  colorGrade: ColorGradePreset;
+  clips: TimelineClip[];
+  subtitles?: SubtitleCue[];
+  cinematicEffects?: CinematicEffects;
+}): Promise<BackendStyleApplyResponse> {
+  const res = await fetch(
+    `${API_BASE_URL}/trends/recipes/${encodeURIComponent(params.recipeId)}/apply`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        project_id: params.projectId,
+        timeline: serializeTimelinePayload(params),
+        record_history: true,
+      }),
+    }
+  );
+  if (!res.ok) {
+    const errBody = await res.json().catch(() => ({ detail: res.statusText }));
+    throw new Error(errBody.detail || `Failed to apply style recipe (${res.status})`);
+  }
+  return (await res.json()) as BackendStyleApplyResponse;
 }
 

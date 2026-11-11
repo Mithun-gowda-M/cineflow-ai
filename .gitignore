@@ -52,6 +52,7 @@ models/*.safetensors
 models/*.gguf
 
 # Logs and Testing
+logs/
 *.log
 npm-debug.log*
 yarn-debug.log*
